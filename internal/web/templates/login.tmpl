@@ -1,0 +1,21 @@
+{{define "title"}}{{.SiteName}} — Sign in{{end}}
+{{define "content"}}
+<section class="card">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
+  <h1>{{.SiteName}}</h1>
+  <p class="lede">Admin sign in</p>
+  {{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
+  <form method="POST" action="/login">
+    <input type="hidden" name="csrf" value="{{.FormCSRF}}">
+    <div class="form-row">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" autofocus required>
+    </div>
+    <div class="form-row">
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn primary" type="submit">Sign in</button>
+  </form>
+</section>
+{{end}}

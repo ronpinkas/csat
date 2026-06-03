@@ -1,0 +1,6 @@
+chart.min.js is Chart.js v4.4.6 — https://www.chartjs.org/
+Copyright (c) Chart.js Contributors. Released under the MIT License.
+https://github.com/chartjs/Chart.js/blob/master/LICENSE.md
+
+Vendored (pinned) and served from /static/vendor so the app stays self-contained
+and the Content-Security-Policy can forbid third-party/CDN scripts.

@@ -1,0 +1,194 @@
+package admin
+
+import (
+	"database/sql"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/instantaiguru/csat/internal/csrf"
+)
+
+// Invite is a pending invitation.
+type Invite struct {
+	ID       int64
+	Role     string
+	Username sql.NullString
+}
+
+func createInviteRow(db *sql.DB, role, username string, createdBy int64, ttl time.Duration) (rawToken string, err error) {
+	rawToken = randToken()
+	now := time.Now()
+	var uname any
+	if username != "" {
+		uname = username
+	}
+	_, err = db.Exec(
+		`INSERT INTO invites(token_hash, role, username, created_by, created_at, expires_at)
+		 VALUES(?, ?, ?, ?, ?, ?)`,
+		hashToken(rawToken), role, uname, createdBy, now.Unix(), now.Add(ttl).Unix(),
+	)
+	if err != nil {
+		return "", err
+	}
+	return rawToken, nil
+}
+
+func inviteByToken(db *sql.DB, rawToken string) (*Invite, error) {
+	var inv Invite
+	err := db.QueryRow(
+		`SELECT id, role, username FROM invites
+		 WHERE token_hash = ? AND redeemed_at IS NULL AND expires_at > ?`,
+		hashToken(rawToken), time.Now().Unix(),
+	).Scan(&inv.ID, &inv.Role, &inv.Username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, errNotFound
+		}
+		return nil, err
+	}
+	return &inv, nil
+}
+
+var errUsernameTaken = errors.New("username taken")
+
+// redeemInvite creates the user and marks the invite redeemed atomically.
+func redeemInvite(db *sql.DB, inv *Invite, username, passwordHash string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(
+		`INSERT INTO users(username, password_hash, role, must_change_pw, active, created_at)
+		 VALUES(?, ?, ?, 0, 1, ?)`,
+		username, passwordHash, inv.Role, time.Now().Unix(),
+	)
+	if err != nil {
+		if isUnique(err) {
+			return errUsernameTaken
+		}
+		return err
+	}
+	newID, _ := res.LastInsertId()
+
+	r, err := tx.Exec(
+		`UPDATE invites SET redeemed_at = ?, redeemed_user_id = ? WHERE id = ? AND redeemed_at IS NULL`,
+		time.Now().Unix(), newID, inv.ID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := r.RowsAffected(); n == 0 {
+		return errNotFound // raced with another redemption
+	}
+	return tx.Commit()
+}
+
+func sweepInvites(db *sql.DB) {
+	_, _ = db.Exec(`DELETE FROM invites WHERE redeemed_at IS NULL AND expires_at < ?`, time.Now().Unix())
+}
+
+func isUnique(err error) bool {
+	return err != nil && strings.Contains(strings.ToUpper(err.Error()), "CONSTRAINT FAILED")
+}
+
+// ---- handlers ----
+
+type inviteView struct {
+	base
+	FormCSRF       string
+	Token          string
+	Username       string
+	PresetUsername bool
+	Error          string
+	Invalid        bool
+}
+
+func (a *Admin) inviteRedeemForm(w http.ResponseWriter, r *http.Request) {
+	tok := r.URL.Query().Get("t")
+	inv, err := inviteByToken(a.db, tok)
+	if err != nil {
+		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
+			base: a.publicBase(), Invalid: true,
+		})
+		return
+	}
+	a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
+		base:           a.publicBase(),
+		FormCSRF:       csrf.Issue(w, a.secure),
+		Token:          tok,
+		Username:       inv.Username.String,
+		PresetUsername: inv.Username.Valid && inv.Username.String != "",
+	})
+}
+
+func (a *Admin) inviteRedeem(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	tok := r.URL.Query().Get("t")
+	if tok == "" {
+		tok = r.PostFormValue("t")
+	}
+
+	inv, err := inviteByToken(a.db, tok)
+	if err != nil {
+		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
+			base: a.publicBase(), Invalid: true,
+		})
+		return
+	}
+
+	username := inv.Username.String
+	if !(inv.Username.Valid && inv.Username.String != "") {
+		username = strings.TrimSpace(r.PostFormValue("username"))
+	}
+	password := r.PostFormValue("new")
+	confirm := r.PostFormValue("confirm")
+
+	rerender := func(msg string) {
+		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
+			base:           a.publicBase(),
+			FormCSRF:       csrf.Issue(w, a.secure),
+			Token:          tok,
+			Username:       username,
+			PresetUsername: inv.Username.Valid && inv.Username.String != "",
+			Error:          msg,
+		})
+	}
+
+	if !csrf.Check(r) {
+		rerender("Your session expired. Please try again.")
+		return
+	}
+	if username == "" {
+		rerender("Please choose a username.")
+		return
+	}
+	if len(password) < minPasswordLen {
+		rerender("Password must be at least 12 characters.")
+		return
+	}
+	if password != confirm {
+		rerender("The passwords don't match.")
+		return
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	switch err := redeemInvite(a.db, inv, username, hash); {
+	case err == nil:
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	case errors.Is(err, errUsernameTaken):
+		rerender("That username is already taken.")
+	case errors.Is(err, errNotFound):
+		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
+			base: a.publicBase(), Invalid: true,
+		})
+	default:
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}

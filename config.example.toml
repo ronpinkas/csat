@@ -1,0 +1,51 @@
+# CSAT configuration. Copy to config.toml and adjust. Keep it chmod 600.
+# Secrets are referenced as env:NAME and supplied from a gitignored .env
+# (see .env.example). Inline literals also work if you gitignore config.toml.
+
+[site]
+name             = "Acme Support"
+display_timezone = "UTC"            # default dashboard tz; the UI can override per request.
+                                    # Storage is ALWAYS UTC unix seconds.
+
+[server]
+listen_addr     = ":8080"
+trust_proxy     = true              # parse X-Forwarded-* only if the peer is trusted (below)
+trusted_proxies = ["127.0.0.1/32"]
+
+[server.tls]
+mode      = "off"                   # "off" = terminate TLS at your reverse proxy (recommended).
+domains   = ["csat.example.com"]    # used only when mode = "autocert"
+cache_dir = "/var/lib/csat/autocert"
+email     = ""                      # OPTIONAL Let's Encrypt/ACME contact (autocert only).
+                                    # The app sends no other email.
+
+[db]
+path = "/var/lib/csat/csat.db"
+
+[security]
+# Long-lived secret shared with the call platform's link-builder. Leave as the env reference
+# (and unset in .env) to auto-generate a unique per-deployment key on first boot; it is then
+# stored at crypto_key_path and shown on the admin Settings page. Never a shared default.
+crypto_secret     = "env:CSAT_CRYPTO_SECRET"
+crypto_key_path   = "/var/lib/csat/crypto.key"
+session_ttl_hours = 12
+invite_ttl_hours  = 168
+
+[admin]
+username         = "admin"
+initial_password = "env:CSAT_ADMIN_INITIAL_PW"   # force-changed on first login
+
+[branding]
+# Logo: just drop a file named logo.svg / logo.png / logo.webp / logo.jpg (etc.) next to this
+# config file and it's picked up automatically — no setting and no restart needed.
+# theme_color drives buttons and selected states.
+theme_color = "#2563eb"
+# logo_dir  = ""   # optional: a different directory to look for logo.<ext> in
+# logo_path = ""   # optional: an explicit file path that overrides auto-detection
+
+[survey]
+# The survey is shown in the language carried by each link's token (en|es).
+# csat_max/ces_max set the rating scales; wording comes from the built-in en/es catalog.
+csat_max         = 5
+ces_max          = 7
+comment_max_len  = 2000

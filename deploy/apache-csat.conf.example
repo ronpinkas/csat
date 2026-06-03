@@ -1,0 +1,21 @@
+# Reverse-proxy vhost for CSAT (Apache) — serves https://csat.icuracao.com from
+# the local csat service on 127.0.0.1:8080.
+# Requires: a2enmod proxy proxy_http headers ssl   (then `certbot --apache`)
+
+<VirtualHost *:80>
+    ServerName csat.icuracao.com
+    Redirect permanent / https://csat.icuracao.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName csat.icuracao.com
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/csat.icuracao.com/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/csat.icuracao.com/privkey.pem
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    ProxyPass        / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+</VirtualHost>

@@ -1,0 +1,27 @@
+[Unit]
+Description=CSAT survey + analytics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=csat
+Group=csat
+ExecStart=/usr/local/bin/csat -config /etc/csat/config.toml
+EnvironmentFile=/etc/csat/csat.env
+Restart=on-failure
+RestartSec=2
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+ReadWritePaths=/var/lib/csat
+# Only needed if the app binds :80/:443 itself (server.tls.mode = "autocert"):
+# AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

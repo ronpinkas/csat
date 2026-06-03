@@ -1,0 +1,54 @@
+{{define "title"}}{{.SiteName}}{{end}}
+{{define "content"}}
+<section class="card survey">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
+  <h1>{{.SiteName}}</h1>
+  <p class="lede">{{.T.Lede}}</p>
+
+  <form method="POST" action="/s?t={{.Token}}">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+
+    <fieldset class="field">
+      <legend>{{.T.CSATLabel}}</legend>
+      <div class="stars" role="radiogroup" aria-label="{{.T.CSATLabel}}">
+        {{range .CSATStars}}
+        <label class="star">
+          <input type="radio" name="csat" value="{{.}}" required>
+          <span aria-hidden="true">★</span>
+          <span class="sr-only">{{.}}</span>
+        </label>
+        {{end}}
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>{{.T.ResolutionLabel}}</legend>
+      <div class="choices">
+        <label class="choice"><input type="radio" name="resolution" value="yes" required> {{.T.ResYes}}</label>
+        <label class="choice"><input type="radio" name="resolution" value="partial"> {{.T.ResPartial}}</label>
+        <label class="choice"><input type="radio" name="resolution" value="no"> {{.T.ResNo}}</label>
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>{{.T.CESLabel}}</legend>
+      <div class="scale" role="radiogroup" aria-label="{{.T.CESLabel}}">
+        {{range .CESScale}}
+        <label class="scale-pt">
+          <input type="radio" name="ces" value="{{.}}" required>
+          <span>{{.}}</span>
+        </label>
+        {{end}}
+      </div>
+      <div class="scale-ends"><span>{{.T.CESHard}}</span><span>{{.T.CESEasy}}</span></div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>{{.T.CommentLabel}}</legend>
+      <textarea name="comment" rows="3" maxlength="{{.CommentMaxLen}}" placeholder="{{.T.CommentHint}}"></textarea>
+    </fieldset>
+
+    <button type="submit" class="btn primary">{{.T.Submit}}</button>
+  </form>
+</section>
+{{end}}

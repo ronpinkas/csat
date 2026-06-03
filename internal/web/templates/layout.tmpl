@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="{{if .Lang}}{{.Lang}}{{else}}en{{end}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}{{.SiteName}}{{end}}</title>
+  <link rel="stylesheet" href="{{asset "/static/css/app.css"}}">
+  <link rel="stylesheet" href="/branding/theme.css">
+</head>
+<body>
+  <main class="container{{if .Wide}} wide{{end}}">
+    {{template "content" .}}
+  </main>
+  {{block "scripts" .}}{{end}}
+</body>
+</html>

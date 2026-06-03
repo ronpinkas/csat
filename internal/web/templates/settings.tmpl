@@ -1,0 +1,20 @@
+{{define "title"}}{{.SiteName}} — Settings{{end}}
+{{define "content"}}
+<header class="admin-head">
+  <h1>Settings</h1>
+  <nav class="admin-nav">
+    <a href="/dashboard">Dashboard</a><a href="/users">Users</a>
+    <form method="POST" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost">Sign out</button>
+    </form>
+  </nav>
+</header>
+
+<section class="card">
+  <h3>Survey-link secret</h3>
+  <p class="lede">Share this exact value with your call platform's link-builder so the survey links
+  it generates will validate here. Treat it like a password — anyone with it can forge links.</p>
+  <span class="code">{{.Secret}}</span>
+  <p class="lede" style="margin-top:1rem">When auto-generated, it is stored at <code>{{.KeyPath}}</code>.</p>
+</section>
+{{end}}

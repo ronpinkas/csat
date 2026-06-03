@@ -1,0 +1,153 @@
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --ink: #1c2530;
+  --muted: #5b6675;
+  --line: #e2e7ee;
+  --brand: #2563eb;
+  --brand-ink: #ffffff;
+  --good: #15a34a;
+  --bad: #d23f3f;
+  --star: #f5b301;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.container {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(20, 30, 45, .06);
+}
+
+.card.center { text-align: center; }
+
+.logo { max-height: 56px; max-width: 70%; display: block; margin: 0 0 1rem; }
+.card.center .logo { margin: 0 auto 1rem; }
+.admin-head .logo { max-height: 36px; margin: 0; }
+
+h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+.lede { color: var(--muted); margin: 0 0 1.25rem; }
+
+.field { border: 0; padding: 0; margin: 0 0 1.5rem; }
+.field legend { font-weight: 600; padding: 0; margin-bottom: .6rem; }
+
+/* Star rating — CSS only. Stars are emitted high->low in the DOM and reversed
+   for display, so they read 1..5 left-to-right while sibling selectors can light
+   "this star and every lower one". Works without JavaScript. */
+.stars { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 6px; }
+.star { cursor: pointer; line-height: 1; }
+.star input { position: absolute; opacity: 0; width: 0; height: 0; }
+.star span[aria-hidden] { font-size: 2.2rem; color: var(--line); transition: color .08s; }
+.star:hover span[aria-hidden],
+.star:hover ~ .star span[aria-hidden],
+.star:has(input:checked) span[aria-hidden],
+.star:has(input:checked) ~ .star span[aria-hidden] { color: var(--star); }
+
+/* Generic choices */
+.choices { display: flex; gap: 10px; flex-wrap: wrap; }
+.choice {
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: .5rem 1rem; cursor: pointer; user-select: none;
+}
+.choice:has(input:checked) { border-color: var(--brand); background: #eff4ff; color: var(--brand); font-weight: 600; }
+.choice input { margin-right: .4rem; }
+
+/* 1..7 effort scale */
+.scale { display: flex; gap: 6px; justify-content: space-between; }
+.scale-pt { flex: 1; text-align: center; cursor: pointer; }
+.scale-pt input { position: absolute; opacity: 0; width: 0; height: 0; }
+.scale-pt span {
+  display: block; border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem 0; font-weight: 600;
+}
+.scale-pt:has(input:checked) span { border-color: var(--brand); background: var(--brand); color: #fff; }
+.scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .82rem; margin-top: .35rem; }
+
+textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px;
+  padding: .7rem; font: inherit; resize: vertical;
+}
+
+.btn {
+  display: inline-block; border: 0; border-radius: 10px;
+  padding: .8rem 1.2rem; font: inherit; font-weight: 600; cursor: pointer;
+  text-decoration: none;
+}
+.btn.primary { background: var(--brand); color: var(--brand-ink); width: 100%; font-size: 1.05rem; }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+
+.big-check, .big-x {
+  width: 64px; height: 64px; border-radius: 50%;
+  display: grid; place-items: center; margin: 0 auto 1rem;
+  font-size: 2rem; font-weight: 700; color: #fff;
+}
+.big-check { background: var(--good); }
+.big-x { background: var(--bad); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---- Admin ---- */
+.admin-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; gap: 12px; flex-wrap: wrap; }
+.admin-head h1 { margin: 0; }
+.admin-nav a { color: var(--muted); text-decoration: none; margin-left: 14px; }
+.admin-nav a:hover { color: var(--brand); }
+.container.wide { max-width: 1040px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.kpi .v { font-size: 1.8rem; font-weight: 700; }
+.kpi .l { color: var(--muted); font-size: .85rem; }
+
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chart-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.chart-card.full { grid-column: 1 / -1; }
+.chart-card h3 { margin: 0 0 .75rem; font-size: 1rem; }
+/* Fixed-height canvas wrapper: prevents the Chart.js resize feedback loop. */
+.cbox { position: relative; height: 220px; }
+.chart-card.full .cbox { height: 260px; }
+#comments { max-height: 260px; overflow-y: auto; }
+
+.toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 18px; }
+.toolbar label { display: flex; flex-direction: column; font-size: .82rem; color: var(--muted); gap: 4px; }
+.toolbar input, .toolbar select { padding: .5rem; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); font-size: .92rem; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+
+.form-row { margin-bottom: 1rem; }
+.form-row label { display: block; font-weight: 600; margin-bottom: .35rem; }
+.form-row input { width: 100%; padding: .65rem; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.notice { padding: .7rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+.notice.err { background: #fdecec; color: var(--bad); }
+.notice.ok { background: #eafaf0; color: var(--good); }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f0f3f7; padding: .5rem .7rem; border-radius: 8px; word-break: break-all; display: block; margin-top: .5rem; }
+.inline { display: inline; }
+#comments .c { border-bottom: 1px solid var(--line); padding: .6rem 0; }
+#comments .c:last-child { border-bottom: 0; }
+#comments .meta { color: var(--muted); font-size: .8rem; margin-bottom: .2rem; }
+#rangeNote { color: var(--muted); font-size: .85rem; }
+
+@media (max-width: 640px) {
+  .charts { grid-template-columns: 1fr; }
+}

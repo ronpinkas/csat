@@ -1,0 +1,36 @@
+{{define "title"}}{{.SiteName}} — CSAT dashboard{{end}}
+{{define "content"}}
+<header class="admin-head">
+  <h1>{{.SiteName}} · CSAT</h1>
+  <nav class="admin-nav">
+    <a href="/dashboard">Dashboard</a>
+    {{if eq .User.Role "admin"}}<a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
+    <a href="/export.csv" id="exportLink">Export CSV</a>
+    <form method="POST" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="btn ghost" type="submit">Sign out</button>
+    </form>
+  </nav>
+</header>
+
+<div class="toolbar" data-tz="{{.TZ}}">
+  <label>From<input type="date" id="from" value="{{.From}}"></label>
+  <label>To<input type="date" id="to" value="{{.To}}"></label>
+  <button class="btn ghost" id="apply" type="button">Apply</button>
+  <span id="rangeNote"></span>
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="charts">
+  <div class="chart-card full"><h3>Responses &amp; CSAT over time</h3><div class="cbox"><canvas id="trendChart"></canvas></div></div>
+  <div class="chart-card"><h3>CSAT distribution</h3><div class="cbox"><canvas id="csatChart"></canvas></div></div>
+  <div class="chart-card"><h3>Effort (CES) distribution</h3><div class="cbox"><canvas id="cesChart"></canvas></div></div>
+  <div class="chart-card"><h3>Resolution</h3><div class="cbox"><canvas id="resChart"></canvas></div></div>
+  <div class="chart-card"><h3>Recent comments</h3><div id="comments"></div></div>
+</div>
+{{end}}
+{{define "scripts"}}
+<script src="{{asset "/static/vendor/chart.min.js"}}"></script>
+<script src="{{asset "/static/js/dashboard.js"}}"></script>
+{{end}}

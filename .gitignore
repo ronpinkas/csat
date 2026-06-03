@@ -1,0 +1,20 @@
+# Real (secret-bearing) config and runtime data — never commit.
+config.toml
+.env
+csat.env
+*.db
+*.db-wal
+*.db-shm
+crypto.key
+
+# Local runtime + per-customer bundles (contain secrets/branding)
+/data/
+/customers/
+/logo.*
+
+# Build output
+/dist/
+csat
+
+# OS / editor
+.DS_Store

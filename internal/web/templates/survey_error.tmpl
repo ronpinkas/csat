@@ -1,0 +1,9 @@
+{{define "title"}}{{.SiteName}}{{end}}
+{{define "content"}}
+<section class="card center">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
+  <div class="big-x" aria-hidden="true">!</div>
+  <h1>{{.Heading}}</h1>
+  <p class="lede">{{.Message}}</p>
+</section>
+{{end}}
