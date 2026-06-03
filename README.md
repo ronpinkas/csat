@@ -4,8 +4,9 @@
 
 A self-contained Customer Satisfaction (CSAT) survey + analytics app in a single Go binary.
 
-- **Public survey** reached via a tokenized SMS link sent after an AI-assistant call. Captures
-  CSAT (1–5), resolution (yes/partial/no), effort/CES (1–7), and an optional comment.
+- **Public survey** reached via a tokenized SMS link sent after a customer-service call
+  (live agent or AI assistant). Captures CSAT (1–5), resolution (yes/partial/no),
+  effort/CES (1–7), and an optional comment.
 - **Admin dashboard** (authenticated) with date-range KPIs, distributions, daily trend,
   recent comments, and CSV export.
 - **One binary.** SQLite (pure-Go), all HTML/CSS/JS + Chart.js embedded. No runtime, no
