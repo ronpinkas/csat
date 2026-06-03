@@ -1,20 +1,21 @@
 # Real (secret-bearing) config and runtime data — never commit.
-config.toml
-.env
-csat.env
+# (paths anchored with / so they don't accidentally match nested dirs like cmd/csat)
+/config.toml
+/.env
+/csat.env
 *.db
 *.db-wal
 *.db-shm
-crypto.key
+/crypto.key
 
 # Local runtime + per-customer bundles (contain secrets/branding)
 /data/
 /customers/
 /logo.*
 
-# Build output
+# Build output (anchored to the repo root — must NOT match cmd/csat)
 /dist/
-csat
+/csat
 
 # OS / editor
 .DS_Store
