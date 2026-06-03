@@ -1,5 +1,6 @@
 # CSAT
 
+[![CI](https://github.com/ronpinkas/csat/actions/workflows/ci.yml/badge.svg)](https://github.com/ronpinkas/csat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A self-contained, **configurable** survey + analytics app in a single Go binary. Ships a CSAT
@@ -40,6 +41,10 @@ make test           # run the test suite
 The Linux binary is a single statically-linked file (everything embedded, no runtime). `make
 package` bundles it with config templates, the systemd unit, and an installer — see
 [`INSTALL.md`](INSTALL.md).
+
+**Prebuilt downloads:** each tagged release attaches archives for **Linux, macOS, and Windows
+(amd64 + arm64)** — see the [Releases](https://github.com/ronpinkas/csat/releases) page. Tag a
+version (`git tag v1.0.0 && git push --tags`) and the release workflow builds and publishes them.
 
 ## Run (local)
 
