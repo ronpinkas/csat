@@ -11,6 +11,18 @@ A self-contained Customer Satisfaction (CSAT) survey + analytics app in a single
 - **One binary.** SQLite (pure-Go), all HTML/CSS/JS + Chart.js embedded. No runtime, no
   `node_modules`. Cross-compiles to a static Linux binary from any OS.
 
+## Screenshots
+
+Admin dashboard — date-range KPIs, trend over time, distributions, resolution, and recent comments:
+
+![CSAT admin dashboard](docs/screenshots/dashboard.png)
+
+The customer survey, localized by the link's language token, with a per-deployment logo + theme:
+
+| English | Español |
+|:---:|:---:|
+| ![English survey](docs/screenshots/survey-en.png) | ![Spanish survey](docs/screenshots/survey-es.png) |
+
 ## Build
 
 ```sh
