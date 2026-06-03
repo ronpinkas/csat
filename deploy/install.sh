@@ -55,6 +55,9 @@ done
 # systemd unit
 install -m 0644 ./csat.service "$UNIT"
 systemctl daemon-reload
+# If the service is already running (i.e. this is an update), apply the new
+# binary now. No-op on a first install (service not yet started).
+systemctl try-restart csat >/dev/null 2>&1 || true
 
 # auto-updater (when bundled): installs the updater + nightly timer
 AUTOUPDATE_NOTE=""
