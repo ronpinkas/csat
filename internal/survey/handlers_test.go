@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/instantaiguru/csat/internal/config"
-	"github.com/instantaiguru/csat/internal/db"
-	"github.com/instantaiguru/csat/internal/token"
-	"github.com/instantaiguru/csat/internal/web"
+	"github.com/ronpinkas/csat/internal/config"
+	"github.com/ronpinkas/csat/internal/db"
+	"github.com/ronpinkas/csat/internal/token"
+	"github.com/ronpinkas/csat/internal/web"
 )
 
 const secret = "integration-test-secret-32bytes-minimum!"

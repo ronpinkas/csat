@@ -3,7 +3,7 @@ package admin
 import (
 	"net/http"
 
-	"github.com/instantaiguru/csat/internal/csrf"
+	"github.com/ronpinkas/csat/internal/csrf"
 )
 
 type loginView struct {

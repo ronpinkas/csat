@@ -1,4 +1,4 @@
-module github.com/instantaiguru/csat
+module github.com/ronpinkas/csat
 
 go 1.26.3
 

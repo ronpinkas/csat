@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/instantaiguru/csat/internal/config"
+	"github.com/ronpinkas/csat/internal/config"
 	"golang.org/x/crypto/acme/autocert"
 )
 

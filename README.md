@@ -1,5 +1,7 @@
 # CSAT
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A self-contained Customer Satisfaction (CSAT) survey + analytics app in a single Go binary.
 
 - **Public survey** reached via a tokenized SMS link sent after an AI-assistant call. Captures
@@ -97,3 +99,15 @@ internal/admin      auth, sessions, invites, analytics, settings, CSV export
 internal/httpx      server, security headers/CSP, rate limiting, logging
 internal/web        embedded templates + static assets (incl. vendored Chart.js)
 ```
+
+## Security model
+
+There is nothing secret in this repository. Each deployment's safety rests on its own
+`crypto_secret` (auto-generated per deployment, never committed) — the link tokens are AES-256-GCM
+sealed with `SHA-256(crypto_secret)`. Publishing the source does not weaken any deployment; rotate
+the secret if it is ever exposed. Report security issues privately to the maintainer rather than via
+public issues.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Bundles Chart.js (MIT).

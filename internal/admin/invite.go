@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/instantaiguru/csat/internal/csrf"
+	"github.com/ronpinkas/csat/internal/csrf"
 )
 
 // Invite is a pending invitation.

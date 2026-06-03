@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/instantaiguru/csat/internal/config"
-	"github.com/instantaiguru/csat/internal/httpx"
-	"github.com/instantaiguru/csat/internal/web"
+	"github.com/ronpinkas/csat/internal/config"
+	"github.com/ronpinkas/csat/internal/httpx"
+	"github.com/ronpinkas/csat/internal/web"
 )
 
 // Admin holds dependencies for the authenticated area.

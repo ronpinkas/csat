@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/instantaiguru/csat/internal/config"
-	"github.com/instantaiguru/csat/internal/csrf"
-	"github.com/instantaiguru/csat/internal/token"
-	"github.com/instantaiguru/csat/internal/web"
+	"github.com/ronpinkas/csat/internal/config"
+	"github.com/ronpinkas/csat/internal/csrf"
+	"github.com/ronpinkas/csat/internal/token"
+	"github.com/ronpinkas/csat/internal/web"
 )
 
 // Handlers serves the public survey + branding routes.
