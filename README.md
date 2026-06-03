@@ -37,9 +37,9 @@ On a Linux server:
 curl -fsSL https://raw.githubusercontent.com/ronpinkas/csat/main/install.sh | sudo sh
 ```
 
-It detects your OS/arch, downloads the matching release, **verifies its SHA-256**, installs the
-binary + a `systemd` service, and — unless `CSAT_NO_AUTOUPDATE=1` — enables a nightly
-**auto-update** timer (tracks the `v1.x` line, backs up the DB before each upgrade). Pin a version
+It detects your OS/arch, downloads the matching release, **verifies its SHA-256**, and installs the
+binary + a `systemd` service. It also installs an updater (`csat-update`) you can run anytime; the
+nightly **auto-update timer is off by default** — opt in with `CSAT_AUTOUPDATE=1`. Pin a version
 with `CSAT_VERSION=v1.0.0`. macOS installs just the binary (no service); Windows users download the
 zip from [Releases](https://github.com/ronpinkas/csat/releases).
 
@@ -51,9 +51,11 @@ password in `/etc/csat/csat.env`, `sudo systemctl enable --now csat`, then front
 
 ### Updating
 
-Auto-update is on by default (the `csat-update.timer` runs nightly). To update now, run
-`sudo csat-update`. To turn it off: `sudo systemctl disable --now csat-update.timer`. Updates stay
-within the current major version; a new major (e.g. `v2`) is left for you to apply deliberately.
+Update on demand with `sudo csat-update` — it fetches the latest release within the current major
+line, backs up the database, verifies the checksum, swaps the binary, and restarts. Config, secret,
+logo, and data are untouched. To automate it nightly (opt-in), enable the timer:
+`sudo systemctl enable --now csat-update.timer`. A new major (e.g. `v2`) is always left for you to
+apply deliberately.
 
 ## Build
 

@@ -6,7 +6,7 @@
 # Detects your OS/arch, downloads the matching release, verifies its SHA-256,
 # and installs it. Options (env vars):
 #   CSAT_VERSION=v1.0.0      pin a version (default: latest stable release)
-#   CSAT_NO_AUTOUPDATE=1     do not enable the nightly auto-update timer
+#   CSAT_AUTOUPDATE=1        enable the nightly auto-update timer (off by default)
 set -eu
 
 REPO="ronpinkas/csat"
@@ -76,4 +76,4 @@ fi
 
 say "Installing ..."
 cd "$dir"
-$SUDO env CSAT_NO_AUTOUPDATE="${CSAT_NO_AUTOUPDATE:-}" sh ./install.sh
+$SUDO env CSAT_AUTOUPDATE="${CSAT_AUTOUPDATE:-}" sh ./install.sh

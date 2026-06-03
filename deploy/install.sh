@@ -63,11 +63,11 @@ if [ -f ./update.sh ] && [ -f ./csat-update.service ] && [ -f ./csat-update.time
   install -m 0644 ./csat-update.service /etc/systemd/system/csat-update.service
   install -m 0644 ./csat-update.timer /etc/systemd/system/csat-update.timer
   systemctl daemon-reload
-  if [ "${CSAT_NO_AUTOUPDATE:-}" = "1" ]; then
-    AUTOUPDATE_NOTE="auto-update installed but disabled — enable with: systemctl enable --now csat-update.timer"
-  else
+  if [ "${CSAT_AUTOUPDATE:-}" = "1" ]; then
     systemctl enable --now csat-update.timer >/dev/null 2>&1 || true
-    AUTOUPDATE_NOTE="auto-update enabled (nightly) — disable with: systemctl disable --now csat-update.timer"
+    AUTOUPDATE_NOTE="nightly auto-update ENABLED — disable with: systemctl disable --now csat-update.timer"
+  else
+    AUTOUPDATE_NOTE="update anytime with: sudo csat-update   (automate nightly: systemctl enable --now csat-update.timer)"
   fi
 fi
 
