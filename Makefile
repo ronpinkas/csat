@@ -41,6 +41,7 @@ package-customer: build-linux
 	cp deploy/csat.service deploy/install.sh dist/$(OUT)/
 	cp deploy/nginx-csat.conf.example deploy/apache-csat.conf.example dist/$(OUT)/
 	cp INSTALL.md README.md dist/$(OUT)/
+	-cp customers/$(CUSTOMER)/DEPLOY.md dist/$(OUT)/ 2>/dev/null
 	chmod +x dist/$(OUT)/csat dist/$(OUT)/install.sh
 	tar -C dist -czf dist/$(OUT).tar.gz $(OUT)
 	@echo "packaged: dist/$(OUT).tar.gz"
