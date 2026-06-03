@@ -1,0 +1,9 @@
+CSAT
+Copyright (c) 2026 Ron Pinkas
+Licensed under the MIT License (see LICENSE).
+
+This product bundles the following third-party software:
+
+- Chart.js (https://www.chartjs.org/) — Copyright (c) Chart.js Contributors,
+  MIT License. Vendored at internal/web/static/vendor/chart.min.js; license text
+  at internal/web/static/vendor/chart.LICENSE.txt.
