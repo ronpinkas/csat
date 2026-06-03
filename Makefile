@@ -19,9 +19,10 @@ package: build-linux
 	rm -rf dist/$(PKG)
 	mkdir -p dist/$(PKG)
 	cp dist/csat-linux-amd64 dist/$(PKG)/csat
-	cp config.example.toml .env.example INSTALL.md README.md dist/$(PKG)/
-	cp deploy/csat.service deploy/install.sh dist/$(PKG)/
-	chmod +x dist/$(PKG)/csat dist/$(PKG)/install.sh
+	cp config.example.toml .env.example survey.example.json INSTALL.md README.md LICENSE NOTICE dist/$(PKG)/
+	cp deploy/csat.service deploy/install.sh deploy/update.sh deploy/csat-update.service deploy/csat-update.timer dist/$(PKG)/
+	cp deploy/nginx-csat.conf.example deploy/apache-csat.conf.example dist/$(PKG)/
+	chmod +x dist/$(PKG)/csat dist/$(PKG)/install.sh dist/$(PKG)/update.sh
 	tar -C dist -czf dist/$(PKG).tar.gz $(PKG)
 	@echo "packaged: dist/$(PKG).tar.gz"
 	@ls -lh dist/$(PKG).tar.gz
@@ -38,11 +39,11 @@ package-customer: build-linux
 	cp dist/csat-linux-amd64 dist/$(OUT)/csat
 	cp customers/$(CUSTOMER)/config.toml customers/$(CUSTOMER)/csat.env dist/$(OUT)/
 	-cp customers/$(CUSTOMER)/logo.* dist/$(OUT)/ 2>/dev/null
-	cp deploy/csat.service deploy/install.sh dist/$(OUT)/
+	cp deploy/csat.service deploy/install.sh deploy/update.sh deploy/csat-update.service deploy/csat-update.timer dist/$(OUT)/
 	cp deploy/nginx-csat.conf.example deploy/apache-csat.conf.example dist/$(OUT)/
-	cp INSTALL.md README.md dist/$(OUT)/
+	cp INSTALL.md README.md survey.example.json dist/$(OUT)/
 	-cp customers/$(CUSTOMER)/DEPLOY.md dist/$(OUT)/ 2>/dev/null
-	chmod +x dist/$(OUT)/csat dist/$(OUT)/install.sh
+	chmod +x dist/$(OUT)/csat dist/$(OUT)/install.sh dist/$(OUT)/update.sh
 	tar -C dist -czf dist/$(OUT).tar.gz $(OUT)
 	@echo "packaged: dist/$(OUT).tar.gz"
 	@ls -lh dist/$(OUT).tar.gz

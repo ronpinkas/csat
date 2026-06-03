@@ -56,9 +56,25 @@ done
 install -m 0644 ./csat.service "$UNIT"
 systemctl daemon-reload
 
+# auto-updater (when bundled): installs the updater + nightly timer
+AUTOUPDATE_NOTE=""
+if [ -f ./update.sh ] && [ -f ./csat-update.service ] && [ -f ./csat-update.timer ]; then
+  install -m 0755 ./update.sh /usr/local/bin/csat-update
+  install -m 0644 ./csat-update.service /etc/systemd/system/csat-update.service
+  install -m 0644 ./csat-update.timer /etc/systemd/system/csat-update.timer
+  systemctl daemon-reload
+  if [ "${CSAT_NO_AUTOUPDATE:-}" = "1" ]; then
+    AUTOUPDATE_NOTE="auto-update installed but disabled — enable with: systemctl enable --now csat-update.timer"
+  else
+    systemctl enable --now csat-update.timer >/dev/null 2>&1 || true
+    AUTOUPDATE_NOTE="auto-update enabled (nightly) — disable with: systemctl disable --now csat-update.timer"
+  fi
+fi
+
 echo
 echo "Installed. Next:"
 echo "  1. review $CONF/config.toml and $CONF/csat.env"
 echo "  2. systemctl enable --now csat"
 echo "  3. curl -fsS http://127.0.0.1:8080/healthz   # -> ok"
 echo "  4. put this host behind your reverse proxy (see nginx-csat.conf.example / apache-csat.conf.example)"
+[ -n "$AUTOUPDATE_NOTE" ] && echo "  * $AUTOUPDATE_NOTE"

@@ -29,6 +29,32 @@ scale, text), localized by the link's language token, with a per-deployment logo
 |:---:|:---:|
 | ![English survey](docs/screenshots/survey-en.png) | ![Spanish survey](docs/screenshots/survey-es.png) |
 
+## Install (one line)
+
+On a Linux server:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ronpinkas/csat/main/install.sh | sudo sh
+```
+
+It detects your OS/arch, downloads the matching release, **verifies its SHA-256**, installs the
+binary + a `systemd` service, and — unless `CSAT_NO_AUTOUPDATE=1` — enables a nightly
+**auto-update** timer (tracks the `v1.x` line, backs up the DB before each upgrade). Pin a version
+with `CSAT_VERSION=v1.0.0`. macOS installs just the binary (no service); Windows users download the
+zip from [Releases](https://github.com/ronpinkas/csat/releases).
+
+> Prefer to read first? `curl -fsSL .../install.sh -o install.sh`, inspect it, then `sudo sh install.sh`.
+
+After install: edit `/etc/csat/config.toml`, drop a `logo.*` into `/etc/csat/`, set the admin
+password in `/etc/csat/csat.env`, `sudo systemctl enable --now csat`, then front it with TLS (see
+`deploy/`). The token secret to share with your link-builder is shown on the admin **Settings** page.
+
+### Updating
+
+Auto-update is on by default (the `csat-update.timer` runs nightly). To update now, run
+`sudo csat-update`. To turn it off: `sudo systemctl disable --now csat-update.timer`. Updates stay
+within the current major version; a new major (e.g. `v2`) is left for you to apply deliberately.
+
 ## Build
 
 ```sh
