@@ -12,6 +12,7 @@ import (
 
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/httpx"
+	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/web"
 )
 
@@ -20,6 +21,7 @@ type Admin struct {
 	db         *sql.DB
 	tmpl       *web.Templates
 	cfg        *config.Config
+	def        *surveydef.Definition
 	secret     string
 	secure     bool
 	sessionTTL time.Duration
@@ -33,11 +35,12 @@ const sessionCookie = "sid"
 
 // New constructs the Admin area, seeding the bootstrap admin on first run and
 // starting a background session sweeper.
-func New(db *sql.DB, tmpl *web.Templates, cfg *config.Config, secret string, secure bool) (*Admin, error) {
+func New(db *sql.DB, tmpl *web.Templates, cfg *config.Config, def *surveydef.Definition, secret string, secure bool) (*Admin, error) {
 	a := &Admin{
 		db:           db,
 		tmpl:         tmpl,
 		cfg:          cfg,
+		def:          def,
 		secret:       secret,
 		secure:       secure,
 		sessionTTL:   time.Duration(cfg.Security.SessionTTLHours) * time.Hour,

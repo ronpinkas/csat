@@ -118,11 +118,11 @@ type Admin struct {
 }
 
 type Survey struct {
-	CSATMax       int `toml:"csat_max"`
-	CESMax        int `toml:"ces_max"`
-	CommentMaxLen int `toml:"comment_max_len"`
-	// Survey wording is provided per-language by the built-in en/es catalog
-	// (see internal/survey/i18n.go), selected by the language in each link token.
+	// Definition is the path to a survey.json describing the questions (types,
+	// per-language labels, options). Empty uses the built-in default CSAT
+	// instrument (see internal/surveydef). System strings (buttons, errors,
+	// "thank you") come from the en/es catalog in internal/survey/i18n.go.
+	Definition string `toml:"definition"`
 }
 
 // placeholder values that must never be accepted as real secrets.
@@ -152,11 +152,6 @@ func defaults() Config {
 		},
 		Admin:    Admin{Username: "admin"},
 		Branding: Branding{ThemeColor: "#2563eb"},
-		Survey: Survey{
-			CSATMax:       5,
-			CESMax:        7,
-			CommentMaxLen: 2000,
-		},
 	}
 }
 

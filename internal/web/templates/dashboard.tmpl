@@ -1,7 +1,7 @@
-{{define "title"}}{{.SiteName}} — CSAT dashboard{{end}}
+{{define "title"}}{{.SiteName}} — Dashboard{{end}}
 {{define "content"}}
 <header class="admin-head">
-  <h1>{{.SiteName}} · CSAT</h1>
+  <h1>{{.SiteName}}</h1>
   <nav class="admin-nav">
     <a href="/dashboard">Dashboard</a>
     {{if eq .User.Role "admin"}}<a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
@@ -22,12 +22,16 @@
 
 <div class="kpis" id="kpis"></div>
 
-<div class="charts">
-  <div class="chart-card full"><h3>Responses &amp; CSAT over time</h3><div class="cbox"><canvas id="trendChart"></canvas></div></div>
-  <div class="chart-card"><h3>CSAT distribution</h3><div class="cbox"><canvas id="csatChart"></canvas></div></div>
-  <div class="chart-card"><h3>Effort (CES) distribution</h3><div class="cbox"><canvas id="cesChart"></canvas></div></div>
-  <div class="chart-card"><h3>Resolution</h3><div class="cbox"><canvas id="resChart"></canvas></div></div>
-  <div class="chart-card"><h3>Recent comments</h3><div id="comments"></div></div>
+<div class="chart-card full" style="margin-bottom:16px">
+  <h3>Responses over time</h3>
+  <div class="cbox"><canvas id="trendChart"></canvas></div>
+</div>
+
+<div class="charts" id="charts"></div>
+
+<div class="chart-card" style="margin-top:16px">
+  <h3>Recent comments</h3>
+  <div id="comments"></div>
 </div>
 {{end}}
 {{define "scripts"}}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a CSAT survey link token.
 
-The token encrypts "callerID|callTime|lang" with AES-256-GCM, keyed by
+The token encrypts "subject|subjectTime|lang" with AES-256-GCM, keyed by
 SHA-256(crypto_secret), and base64url-encodes (no padding) nonce||ciphertext||tag.
 This matches the CSAT server's validation exactly.
 
@@ -9,7 +9,7 @@ Requires: pip install cryptography
 
     from mint_link import mint_link
     url = mint_link("https://csat.example.com", CRYPTO_SECRET,
-                    caller_id="+15551234567", call_time=1717286400, lang="es")
+                    subject="+15551234567", subject_time=1717286400, lang="es")
 """
 import base64
 import hashlib
@@ -17,21 +17,21 @@ import secrets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-def mint_token(crypto_secret: str, caller_id: str, call_time: int, lang: str = "en") -> str:
+def mint_token(crypto_secret: str, subject: str, subject_time: int, lang: str = "en") -> str:
     """Return the opaque survey token (the value for the ?t= query param)."""
-    if "|" in caller_id or "|" in lang:
-        raise ValueError("caller_id and lang must not contain '|'")
+    if "|" in subject or "|" in lang:
+        raise ValueError("subject and lang must not contain '|'")
     lang = lang or "en"
     key = hashlib.sha256(crypto_secret.encode("utf-8")).digest()       # 32-byte AES-256 key
     nonce = secrets.token_bytes(12)                                    # fresh random nonce
-    plaintext = f"{caller_id}|{int(call_time)}|{lang}".encode("utf-8")
+    plaintext = f"{subject}|{int(subject_time)}|{lang}".encode("utf-8")
     sealed = AESGCM(key).encrypt(nonce, plaintext, None)               # ciphertext || 16-byte tag
     return base64.urlsafe_b64encode(nonce + sealed).rstrip(b"=").decode("ascii")
 
 
-def mint_link(base_url: str, crypto_secret: str, caller_id: str, call_time: int, lang: str = "en") -> str:
+def mint_link(base_url: str, crypto_secret: str, subject: str, subject_time: int, lang: str = "en") -> str:
     """Return the full survey URL to text to the customer."""
-    token = mint_token(crypto_secret, caller_id, call_time, lang)
+    token = mint_token(crypto_secret, subject, subject_time, lang)
     return f"{base_url.rstrip('/')}/s?t={token}"
 
 
@@ -43,10 +43,10 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Mint a CSAT survey link")
     p.add_argument("--secret", default=os.environ.get("CSAT_CRYPTO_SECRET", ""), help="crypto_secret (or set CSAT_CRYPTO_SECRET)")
     p.add_argument("--base", default="https://csat.example.com", help="base URL")
-    p.add_argument("--cid", required=True, help="caller id, E.164")
-    p.add_argument("--ts", type=int, default=int(time.time()), help="call time, unix seconds")
+    p.add_argument("--subject", required=True, help="subject (phone, order id, ticket id…)")
+    p.add_argument("--ts", type=int, default=int(time.time()), help="subject time, unix seconds")
     p.add_argument("--lang", default="en", help="en | es")
     a = p.parse_args()
     if not a.secret:
         p.error("provide --secret or set CSAT_CRYPTO_SECRET")
-    print(mint_link(a.base, a.secret, a.cid, a.ts, a.lang))
+    print(mint_link(a.base, a.secret, a.subject, a.ts, a.lang))

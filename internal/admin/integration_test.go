@@ -15,6 +15,7 @@ import (
 
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/db"
+	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/web"
 )
 
@@ -39,12 +40,11 @@ func newServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	cfg := &config.Config{}
 	cfg.Site.Name = "Test Co"
 	cfg.Site.DisplayTimezone = "UTC"
-	cfg.Survey.CSATMax, cfg.Survey.CESMax = 5, 7
 	cfg.Admin.Username = "admin"
 	cfg.Admin.InitialPassword = initialPW
 	cfg.Security.SessionTTLHours, cfg.Security.InviteTTLHours = 12, 168
 
-	a, err := New(database, tmpl, cfg, "integration-secret-32bytes-minimum-aaa", false)
+	a, err := New(database, tmpl, cfg, surveydef.Default(), "integration-secret-32bytes-minimum-aaa", false)
 	if err != nil {
 		t.Fatalf("admin.New: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAdminFullFlow(t *testing.T) {
 		"csrf": {csrfFrom(t, body)}, "current": {initialPW},
 		"new": {"a-brand-new-password"}, "confirm": {"a-brand-new-password"},
 	})
-	if !strings.Contains(body, "CSAT") {
+	if !strings.Contains(body, "Recent comments") {
 		t.Fatalf("expected dashboard after password change, got: %s", first(body, 200))
 	}
 
@@ -176,18 +176,40 @@ func TestUnauthenticatedRedirectsToLogin(t *testing.T) {
 
 func seedResponses(t *testing.T, database *sql.DB, n int) {
 	t.Helper()
-	now := time.Now().Unix()
 	for i := 0; i < n; i++ {
-		_, err := database.Exec(
-			`INSERT INTO responses(caller_id, call_time, csat, resolution, ces, comment, submitted_at)
-			 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-			"+1555000000"+string(rune('0'+i)), now-int64(i*60),
+		insertResponse(t, database, "+1555000000"+string(rune('0'+i)),
 			(i%5)+1, []string{"yes", "partial", "no"}[i%3], (i%7)+1,
-			map[bool]string{true: "nice", false: ""}[i%2 == 0], now,
-		)
-		if err != nil {
-			t.Fatalf("seed: %v", err)
+			map[bool]string{true: "nice", false: ""}[i%2 == 0])
+	}
+}
+
+// insertResponse writes a response + its answers using the default CSAT keys
+// (csat=stars, resolution=choice, ces=scale, comment=text).
+func insertResponse(t *testing.T, database *sql.DB, subject string, csat int, resolution string, ces int, comment string) {
+	t.Helper()
+	now := time.Now().Unix()
+	res, err := database.Exec(
+		`INSERT INTO responses(subject, subject_time, lang, submitted_at) VALUES(?, ?, 'en', ?)`,
+		subject, now, now)
+	if err != nil {
+		t.Fatalf("seed response: %v", err)
+	}
+	id, _ := res.LastInsertId()
+	addNum := func(key string, v int) {
+		if _, err := database.Exec(`INSERT INTO answers(response_id, question_key, num) VALUES(?, ?, ?)`, id, key, v); err != nil {
+			t.Fatalf("seed answer %s: %v", key, err)
 		}
+	}
+	addText := func(key, v string) {
+		if _, err := database.Exec(`INSERT INTO answers(response_id, question_key, text) VALUES(?, ?, ?)`, id, key, v); err != nil {
+			t.Fatalf("seed answer %s: %v", key, err)
+		}
+	}
+	addNum("csat", csat)
+	addText("resolution", resolution)
+	addNum("ces", ces)
+	if comment != "" {
+		addText("comment", comment)
 	}
 }
 

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "intro": {
+    "en": "Thanks for your call. How did we do? It takes about 20 seconds.",
+    "es": "Gracias por su llamada. ¿Cómo lo hicimos? Toma unos 20 segundos."
+  },
+  "thanks": {
+    "en": "Your feedback has been recorded. We appreciate you taking the time.",
+    "es": "Hemos registrado sus comentarios. Agradecemos su tiempo."
+  },
+  "questions": [
+    {
+      "key": "csat",
+      "type": "stars",
+      "max": 5,
+      "required": true,
+      "label": {
+        "en": "Overall, how satisfied were you?",
+        "es": "En general, ¿qué tan satisfecho/a quedó?"
+      }
+    },
+    {
+      "key": "resolution",
+      "type": "choice",
+      "required": true,
+      "label": {
+        "en": "Was your issue resolved?",
+        "es": "¿Se resolvió su problema?"
+      },
+      "options": [
+        { "value": "yes", "label": { "en": "Yes", "es": "Sí" } },
+        { "value": "partial", "label": { "en": "Partially", "es": "Parcialmente" } },
+        { "value": "no", "label": { "en": "No", "es": "No" } }
+      ]
+    },
+    {
+      "key": "ces",
+      "type": "scale",
+      "min": 1,
+      "max": 7,
+      "required": true,
+      "label": {
+        "en": "How easy was it to get your issue handled?",
+        "es": "¿Qué tan fácil fue resolver su asunto?"
+      },
+      "ends": {
+        "low": { "en": "Very hard", "es": "Muy difícil" },
+        "high": { "en": "Very easy", "es": "Muy fácil" }
+      }
+    },
+    {
+      "key": "comment",
+      "type": "text",
+      "maxlen": 2000,
+      "label": {
+        "en": "Anything else you'd like to share?",
+        "es": "¿Algo más que quiera comentar?"
+      },
+      "placeholder": { "en": "Optional", "es": "Opcional" }
+    }
+  ]
+}

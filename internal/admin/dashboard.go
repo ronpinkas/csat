@@ -6,7 +6,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/ronpinkas/csat/internal/surveydef"
 )
 
 type dashboardView struct {
@@ -20,59 +23,25 @@ func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request) {
 	_, _, info, _ := a.parseRange(r)
 	b := a.newBase(r)
 	b.Wide = true
-	a.render(w, http.StatusOK, "dashboard.tmpl", dashboardView{
-		base: b,
-		From: info.From, To: info.To, TZ: info.TZ,
-	})
+	a.render(w, http.StatusOK, "dashboard.tmpl", dashboardView{base: b, From: info.From, To: info.To, TZ: info.TZ})
 }
 
 func (a *Admin) analytics(w http.ResponseWriter, r *http.Request) {
 	from, to, info, loc := a.parseRange(r)
-
-	kpis, err := queryKPIs(a.db, from, to)
+	res, err := computeAnalytics(a.db, a.def, from, to, loc, info)
 	if err != nil {
+		log.Printf("admin: analytics: %v", err)
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
 	}
-	csatDist, err := queryDistribution(a.db, from, to, "csat", 1, max(a.cfg.Survey.CSATMax, 5))
-	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
-		return
-	}
-	cesDist, err := queryDistribution(a.db, from, to, "ces", 1, max(a.cfg.Survey.CESMax, 7))
-	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
-		return
-	}
-	res, err := queryResolution(a.db, from, to)
-	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
-		return
-	}
-	trend, err := queryTrend(a.db, from, to, loc)
-	if err != nil {
-		http.Error(w, "query error", http.StatusInternalServerError)
-		return
-	}
-
-	kpis.CSATAvg = round2(kpis.CSATAvg)
-	kpis.CSATPct = round2(kpis.CSATPct)
-	kpis.CESAvg = round2(kpis.CESAvg)
-	kpis.ResolutionRate = round2(kpis.ResolutionRate * 100)
-
-	writeJSON(w, AnalyticsResult{
-		Range: info, KPIs: kpis,
-		CSATDistribution: csatDist, CESDistribution: cesDist,
-		Resolution: res, Trend: trend,
-	})
+	writeJSON(w, res)
 }
 
 type commentRow struct {
 	SubmittedAt int64  `json:"submitted_at"`
-	CSAT        int    `json:"csat"`
-	Resolution  string `json:"resolution"`
-	CES         int    `json:"ces"`
-	Comment     string `json:"comment"`
+	Lang        string `json:"lang"`
+	Question    string `json:"question"`
+	Text        string `json:"text"`
 }
 
 func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
@@ -81,25 +50,47 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 	if page < 0 {
 		page = 0
 	}
-	const limit = 20
+	const limit = 25
+
+	labels := map[string]string{}
+	var keys []string
+	for _, q := range a.def.Questions {
+		if q.Type == surveydef.TypeText {
+			keys = append(keys, q.Key)
+			labels[q.Key] = q.LabelFor("en")
+		}
+	}
+	out := []commentRow{}
+	if len(keys) == 0 {
+		writeJSON(w, map[string]any{"page": page, "comments": out})
+		return
+	}
+
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
+	args := make([]any, 0, len(keys)+4)
+	for _, k := range keys {
+		args = append(args, k)
+	}
+	args = append(args, from, to, limit, page*limit)
 	rows, err := a.db.Query(
-		`SELECT submitted_at, csat, resolution, ces, comment FROM responses
-		 WHERE submitted_at >= ? AND submitted_at < ? AND comment <> ''
-		 ORDER BY submitted_at DESC LIMIT ? OFFSET ?`,
-		from, to, limit, page*limit,
-	)
+		`SELECT r.submitted_at, r.lang, a.question_key, a.text
+		 FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key IN (`+ph+`) AND a.text IS NOT NULL AND a.text <> ''
+		   AND r.submitted_at >= ? AND r.submitted_at < ?
+		 ORDER BY r.submitted_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-	out := []commentRow{}
 	for rows.Next() {
 		var c commentRow
-		if err := rows.Scan(&c.SubmittedAt, &c.CSAT, &c.Resolution, &c.CES, &c.Comment); err != nil {
+		var key string
+		if err := rows.Scan(&c.SubmittedAt, &c.Lang, &key, &c.Text); err != nil {
 			http.Error(w, "query error", http.StatusInternalServerError)
 			return
 		}
+		c.Question = labels[key]
 		out = append(out, c)
 	}
 	writeJSON(w, map[string]any{"page": page, "comments": out})
@@ -122,10 +113,9 @@ func (a *Admin) settings(w http.ResponseWriter, r *http.Request) {
 func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	from, to, info, _ := a.parseRange(r)
 	rows, err := a.db.Query(
-		`SELECT id, submitted_at, caller_id, call_time, csat, resolution, ces, comment
-		 FROM responses WHERE submitted_at >= ? AND submitted_at < ? ORDER BY submitted_at`,
-		from, to,
-	)
+		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, a.question_key, a.num, a.text
+		 FROM responses r LEFT JOIN answers a ON a.response_id = r.id
+		 WHERE r.submitted_at >= ? AND r.submitted_at < ? ORDER BY r.id`, from, to)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
@@ -133,30 +123,70 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=\"csat-"+info.From+"_"+info.To+".csv\"")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"survey-"+info.From+"_"+info.To+".csv\"")
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
-	_ = cw.Write([]string{"id", "submitted_at_utc", "caller_id", "call_time_utc", "csat", "resolution", "ces", "comment"})
+
+	header := []string{"id", "submitted_at_utc", "subject", "subject_time_utc", "lang"}
+	for _, q := range a.def.Questions {
+		header = append(header, q.Key)
+	}
+	_ = cw.Write(header)
+
+	var (
+		curID                 int64
+		haveRow               bool
+		submittedAt, subjTime int64
+		subject, lang         string
+		vals                  map[string]string
+	)
+	flush := func() {
+		if !haveRow {
+			return
+		}
+		rec := []string{
+			strconv.FormatInt(curID, 10),
+			time.Unix(submittedAt, 0).UTC().Format(time.RFC3339),
+			csvSafe(subject),
+			time.Unix(subjTime, 0).UTC().Format(time.RFC3339),
+			lang,
+		}
+		for _, q := range a.def.Questions {
+			rec = append(rec, csvSafe(vals[q.Key]))
+		}
+		_ = cw.Write(rec)
+	}
 
 	for rows.Next() {
-		var id, submittedAt, callTime int64
-		var callerID, resolution, comment string
-		var csat, ces int
-		if err := rows.Scan(&id, &submittedAt, &callerID, &callTime, &csat, &resolution, &ces, &comment); err != nil {
+		var id, sAt, sTime int64
+		var subj, lng string
+		var qkey, txt *string
+		var num *int64
+		if err := rows.Scan(&id, &sAt, &subj, &sTime, &lng, &qkey, &num, &txt); err != nil {
 			log.Printf("admin: export scan: %v", err)
 			return
 		}
-		_ = cw.Write([]string{
-			strconv.FormatInt(id, 10),
-			time.Unix(submittedAt, 0).UTC().Format(time.RFC3339),
-			csvSafe(callerID),
-			time.Unix(callTime, 0).UTC().Format(time.RFC3339),
-			strconv.Itoa(csat),
-			resolution,
-			strconv.Itoa(ces),
-			csvSafe(comment),
-		})
+		if !haveRow || id != curID {
+			flush()
+			curID, submittedAt, subjTime, subject, lang = id, sAt, sTime, subj, lng
+			vals = map[string]string{}
+			haveRow = true
+		}
+		if qkey != nil {
+			v := ""
+			if num != nil {
+				v = strconv.FormatInt(*num, 10)
+			} else if txt != nil {
+				v = *txt
+			}
+			if existing, ok := vals[*qkey]; ok && existing != "" {
+				vals[*qkey] = existing + ";" + v // multichoice
+			} else {
+				vals[*qkey] = v
+			}
+		}
 	}
+	flush()
 }
 
 // ---- helpers ----
@@ -177,7 +207,7 @@ func (a *Admin) parseRange(r *http.Request) (from, to int64, info RangeInfo, loc
 		fromDate, toDate = toDate, fromDate
 	}
 	from = fromDate.Unix()
-	to = toDate.AddDate(0, 0, 1).Unix() // exclusive end-of-day
+	to = toDate.AddDate(0, 0, 1).Unix()
 	info = RangeInfo{From: fromDate.Format("2006-01-02"), To: toDate.Format("2006-01-02"), TZ: tz}
 	return
 }

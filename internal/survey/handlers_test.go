@@ -10,6 +10,7 @@ import (
 
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/db"
+	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/token"
 	"github.com/ronpinkas/csat/internal/web"
 )
@@ -32,10 +33,7 @@ func newTestHandlers(t *testing.T) *Handlers {
 	}
 	cfg := &config.Config{}
 	cfg.Site.Name = "Test Co"
-	cfg.Survey.CSATMax = 5
-	cfg.Survey.CESMax = 7
-	cfg.Survey.CommentMaxLen = 2000
-	return New(database, tmpl, cfg, secret, false)
+	return New(database, tmpl, cfg, surveydef.Default(), secret, false)
 }
 
 func TestSurveyFlow(t *testing.T) {

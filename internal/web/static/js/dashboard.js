@@ -1,9 +1,11 @@
-// Dashboard: fetch analytics + comments JSON and render KPIs and Chart.js charts.
+// Dashboard: fetch analytics + comments JSON and build KPI tiles and a chart
+// card per question, adapting to whatever the survey definition contains.
 (function () {
   "use strict";
 
   var toolbar = document.querySelector(".toolbar");
   var tz = toolbar ? toolbar.getAttribute("data-tz") : "UTC";
+  var palette = ["#15a34a", "#f5b301", "#d23f3f", "#2563eb", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
   var charts = {};
 
   function rangeQuery() {
@@ -11,95 +13,100 @@
     var to = document.getElementById("to").value;
     return "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&tz=" + encodeURIComponent(tz);
   }
+  function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+  function round2(x) { return Math.round(x * 100) / 100; }
+  function destroyCharts() { Object.keys(charts).forEach(function (k) { charts[k].destroy(); }); charts = {}; }
 
-  function kpiCard(value, label) {
-    return '<div class="kpi"><div class="v">' + value + '</div><div class="l">' + label + "</div></div>";
+  function kpi(value, label) {
+    var c = el("div", "kpi");
+    var v = el("div", "v"); v.textContent = value; c.appendChild(v);
+    var l = el("div", "l"); l.textContent = label; c.appendChild(l);
+    return c;
   }
 
-  function renderKPIs(k) {
-    var el = document.getElementById("kpis");
-    el.innerHTML =
-      kpiCard(k.responses, "Responses") +
-      kpiCard(k.csat_avg.toFixed(2) + " / 5", "CSAT average") +
-      kpiCard(k.csat_pct.toFixed(0) + "%", "CSAT (top-2-box)") +
-      kpiCard(k.ces_avg.toFixed(2) + " / 7", "Effort (CES) avg") +
-      kpiCard(k.resolution_rate.toFixed(0) + "%", "Resolution rate");
-  }
-
-  function draw(id, config) {
-    if (charts[id]) charts[id].destroy();
-    charts[id] = new Chart(document.getElementById(id).getContext("2d"), config);
-  }
-
-  function renderCharts(d) {
-    draw("trendChart", {
+  function barChart(canvas, labels, data) {
+    return new Chart(canvas, {
       type: "bar",
-      data: {
-        labels: d.trend.labels,
-        datasets: [
-          { type: "bar", label: "Responses", data: d.trend.responses, yAxisID: "y", backgroundColor: "#bdd0fb" },
-          { type: "line", label: "CSAT avg", data: d.trend.csat_avg, yAxisID: "y1", borderColor: "#2563eb", tension: .25 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: {
-          y: { beginAtZero: true, position: "left", title: { display: true, text: "Responses" } },
-          y1: { beginAtZero: true, suggestedMax: 5, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "CSAT" } }
-        }
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: "#2563eb" }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+  }
+
+  function render(d) {
+    destroyCharts();
+
+    // KPIs: responses + one tile per numeric question
+    var kpis = document.getElementById("kpis");
+    kpis.innerHTML = "";
+    kpis.appendChild(kpi(d.responses, "Responses"));
+    d.questions.forEach(function (q) {
+      if (q.avg == null) return;
+      if (q.type === "nps") kpis.appendChild(kpi(round2(q.nps), q.label + " (NPS)"));
+      else kpis.appendChild(kpi(round2(q.avg) + " / " + q.max, q.label));
+    });
+
+    // overall responses trend
+    charts.trend = new Chart(document.getElementById("trendChart"), {
+      type: "bar",
+      data: { labels: d.trend.labels, datasets: [{ label: "Responses", data: d.trend.responses, backgroundColor: "#bdd0fb" }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+
+    // one card per question (text questions surface in Recent comments)
+    var area = document.getElementById("charts");
+    area.innerHTML = "";
+    d.questions.forEach(function (q, i) {
+      if (q.type === "text") return;
+      var card = el("div", "chart-card");
+      var h = el("h3");
+      var extra = "";
+      if (q.top_box_pct != null) extra = " · " + Math.round(q.top_box_pct) + "% top-box";
+      else if (q.nps != null) extra = " · NPS " + round2(q.nps);
+      h.textContent = q.label + extra;
+      card.appendChild(h);
+      var box = el("div", "cbox");
+      var cv = el("canvas"); cv.id = "q_" + i; box.appendChild(cv); card.appendChild(box);
+      area.appendChild(card);
+
+      if (q.distribution) {
+        charts["q" + i] = barChart(cv, q.distribution.labels, q.distribution.data);
+      } else if (q.breakdown) {
+        charts["q" + i] = new Chart(cv, {
+          type: "doughnut",
+          data: { labels: q.breakdown.labels, datasets: [{ data: q.breakdown.data, backgroundColor: palette }] },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
       }
     });
 
-    draw("csatChart", barConfig(d.csat_distribution.labels, d.csat_distribution.data, "#2563eb"));
-    draw("cesChart", barConfig(d.ces_distribution.labels, d.ces_distribution.data, "#15a34a"));
-
-    draw("resChart", {
-      type: "doughnut",
-      data: { labels: d.resolution.labels, datasets: [{ data: d.resolution.data, backgroundColor: ["#15a34a", "#f5b301", "#d23f3f"] }] },
-      options: { responsive: true, maintainAspectRatio: false }
-    });
-  }
-
-  function barConfig(labels, data, color) {
-    return {
-      type: "bar",
-      data: { labels: labels, datasets: [{ data: data, backgroundColor: color }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-    };
+    document.getElementById("rangeNote").textContent = "Times shown in " + tz;
+    var ex = document.getElementById("exportLink");
+    if (ex) ex.href = "/export.csv?" + rangeQuery();
   }
 
   function renderComments(list) {
-    var el = document.getElementById("comments");
-    if (!list.length) { el.innerHTML = '<p class="lede">No comments in this range.</p>'; return; }
-    el.innerHTML = list.map(function (c) {
-      var when = new Date(c.submitted_at * 1000).toLocaleString();
-      var meta = "CSAT " + c.csat + " · CES " + c.ces + " · " + c.resolution + " · " + when;
-      return '<div class="c"><div class="meta"></div><div class="body"></div></div>';
-    }).join("");
-    // Fill text via textContent to avoid any HTML injection from comments.
-    var nodes = el.querySelectorAll(".c");
-    list.forEach(function (c, i) {
-      var when = new Date(c.submitted_at * 1000).toLocaleString();
-      nodes[i].querySelector(".meta").textContent = "CSAT " + c.csat + " · CES " + c.ces + " · " + c.resolution + " · " + when;
-      nodes[i].querySelector(".body").textContent = c.comment;
+    var box = document.getElementById("comments");
+    if (!list.length) { box.innerHTML = '<p class="lede">No comments in this range.</p>'; return; }
+    box.innerHTML = "";
+    list.forEach(function (c) {
+      var item = el("div", "c");
+      var meta = el("div", "meta");
+      meta.textContent = (c.question ? c.question + " · " : "") + new Date(c.submitted_at * 1000).toLocaleString();
+      var body = el("div", "body");
+      body.textContent = c.text;
+      item.appendChild(meta); item.appendChild(body);
+      box.appendChild(item);
     });
   }
 
   function load() {
     var q = rangeQuery();
-    var exportLink = document.getElementById("exportLink");
-    if (exportLink) exportLink.href = "/export.csv?" + q;
-    document.getElementById("rangeNote").textContent = "Times shown in " + tz;
-
     fetch("/api/analytics?" + q, { headers: { Accept: "application/json" } })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { renderKPIs(d.kpis); renderCharts(d); })
-      .catch(function () {});
-
+      .then(function (r) { return r.json(); }).then(render).catch(function () {});
     fetch("/api/comments?" + q, { headers: { Accept: "application/json" } })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { renderComments(d.comments || []); })
-      .catch(function () {});
+      .then(function (r) { return r.json(); }).then(function (d) { renderComments(d.comments || []); }).catch(function () {});
   }
 
   var apply = document.getElementById("apply");

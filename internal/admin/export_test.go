@@ -14,23 +14,8 @@ import (
 func TestExportCSV(t *testing.T) {
 	srv, database := newServer(t)
 
-	now := time.Now().Unix()
-	rows := []struct {
-		caller, res, comment string
-		csat, ces            int
-	}{
-		{"+15550000001", "yes", "Great help", 5, 6},
-		{"+15550000002", "partial", "=DANGER()+1", 3, 4}, // formula injection attempt
-	}
-	for _, r := range rows {
-		if _, err := database.Exec(
-			`INSERT INTO responses(caller_id, call_time, csat, resolution, ces, comment, submitted_at)
-			 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-			r.caller, now, r.csat, r.res, r.ces, r.comment, now,
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
+	insertResponse(t, database, "+15550000001", 5, "yes", 6, "Great help")
+	insertResponse(t, database, "+15550000002", 3, "partial", 4, "=DANGER()+1") // formula injection attempt
 
 	admin := loginAdmin(t, srv)
 	today := time.Now().UTC().Format("2006-01-02")

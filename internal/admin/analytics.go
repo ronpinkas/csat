@@ -3,38 +3,9 @@ package admin
 import (
 	"database/sql"
 	"time"
+
+	"github.com/ronpinkas/csat/internal/surveydef"
 )
-
-// KPIs are the headline metrics for a date range.
-type KPIs struct {
-	Responses      int     `json:"responses"`
-	CSATAvg        float64 `json:"csat_avg"`
-	CSATPct        float64 `json:"csat_pct"` // top-2-box %
-	CESAvg         float64 `json:"ces_avg"`
-	ResolutionRate float64 `json:"resolution_rate"`
-}
-
-// Distribution is a histogram over integer buckets.
-type Distribution struct {
-	Labels []int `json:"labels"`
-	Data   []int `json:"data"`
-}
-
-// Breakdown is a categorical count (resolution).
-type Breakdown struct {
-	Labels []string `json:"labels"`
-	Data   []int    `json:"data"`
-}
-
-// Trend is the per-day series.
-type Trend struct {
-	Labels         []string  `json:"labels"`
-	Responses      []int     `json:"responses"`
-	CSATAvg        []float64 `json:"csat_avg"`
-	CESAvg         []float64 `json:"ces_avg"`
-	CSATPct        []float64 `json:"csat_pct"`
-	ResolutionRate []float64 `json:"resolution_rate"`
-}
 
 // RangeInfo echoes the resolved query range.
 type RangeInfo struct {
@@ -43,151 +14,260 @@ type RangeInfo struct {
 	TZ   string `json:"tz"`
 }
 
+// Distribution is a histogram over integer buckets.
+type Distribution struct {
+	Labels []int `json:"labels"`
+	Data   []int `json:"data"`
+}
+
+// Breakdown is a categorical count (choice/multichoice).
+type Breakdown struct {
+	Labels []string `json:"labels"`
+	Data   []int    `json:"data"`
+}
+
+// NumTrend is a per-day average series for a numeric question.
+type NumTrend struct {
+	Labels []string  `json:"labels"`
+	Avg    []float64 `json:"avg"`
+}
+
+// QStat holds the computed analytics for one question (only the fields relevant
+// to its type are populated).
+type QStat struct {
+	Key          string        `json:"key"`
+	Type         string        `json:"type"`
+	Label        string        `json:"label"`
+	Min          int           `json:"min,omitempty"`
+	Max          int           `json:"max,omitempty"`
+	Count        int           `json:"count"`
+	Avg          *float64      `json:"avg,omitempty"`
+	TopBoxPct    *float64      `json:"top_box_pct,omitempty"`
+	NPS          *float64      `json:"nps,omitempty"`
+	Distribution *Distribution `json:"distribution,omitempty"`
+	Breakdown    *Breakdown    `json:"breakdown,omitempty"`
+	Trend        *NumTrend     `json:"trend,omitempty"`
+}
+
+// ResponsesTrend is the overall per-day response count.
+type ResponsesTrend struct {
+	Labels    []string `json:"labels"`
+	Responses []int    `json:"responses"`
+}
+
 // AnalyticsResult is the full dashboard payload.
 type AnalyticsResult struct {
-	Range            RangeInfo    `json:"range"`
-	KPIs             KPIs         `json:"kpis"`
-	CSATDistribution Distribution `json:"csat_distribution"`
-	CESDistribution  Distribution `json:"ces_distribution"`
-	Resolution       Breakdown    `json:"resolution"`
-	Trend            Trend        `json:"trend"`
+	Range     RangeInfo      `json:"range"`
+	Responses int            `json:"responses"`
+	Questions []QStat        `json:"questions"`
+	Trend     ResponsesTrend `json:"trend"`
 }
 
-func queryKPIs(db *sql.DB, from, to int64) (KPIs, error) {
-	var k KPIs
-	err := db.QueryRow(
-		`SELECT
-		   COUNT(*),
-		   COALESCE(AVG(csat), 0),
-		   COALESCE(AVG(CASE WHEN csat >= 4 THEN 1.0 ELSE 0 END), 0),
-		   COALESCE(AVG(ces), 0),
-		   COALESCE(AVG(CASE WHEN resolution = 'yes' THEN 1.0 ELSE 0 END), 0)
-		 FROM responses WHERE submitted_at >= ? AND submitted_at < ?`,
-		from, to,
-	).Scan(&k.Responses, &k.CSATAvg, &k.CSATPct, &k.CESAvg, &k.ResolutionRate)
-	if err != nil {
-		return k, err
+// computeAnalytics builds the full dashboard payload for the date range.
+func computeAnalytics(db *sql.DB, def *surveydef.Definition, from, to int64, loc *time.Location, info RangeInfo) (AnalyticsResult, error) {
+	out := AnalyticsResult{Range: info}
+
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM responses WHERE submitted_at >= ? AND submitted_at < ?`, from, to,
+	).Scan(&out.Responses); err != nil {
+		return out, err
 	}
-	k.CSATPct *= 100
-	return k, nil
+
+	for _, q := range def.Questions {
+		s := QStat{Key: q.Key, Type: q.Type, Label: q.LabelFor("en"), Min: q.Min, Max: q.Max}
+		var err error
+		switch q.Type {
+		case surveydef.TypeStars, surveydef.TypeScale, surveydef.TypeNPS:
+			err = fillNumeric(db, &s, q, from, to, loc)
+		case surveydef.TypeChoice, surveydef.TypeMultiChoice:
+			err = fillBreakdown(db, &s, q, from, to)
+		case surveydef.TypeText:
+			err = db.QueryRow(
+				`SELECT COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
+				 WHERE a.question_key = ? AND a.text IS NOT NULL AND a.text <> '' AND r.submitted_at >= ? AND r.submitted_at < ?`,
+				q.Key, from, to,
+			).Scan(&s.Count)
+		}
+		if err != nil {
+			return out, err
+		}
+		out.Questions = append(out.Questions, s)
+	}
+
+	trend, err := responsesTrend(db, from, to, loc)
+	if err != nil {
+		return out, err
+	}
+	out.Trend = trend
+	return out, nil
 }
 
-// queryDistribution returns counts per integer bucket lo..hi for the given
-// column. col is a trusted constant ("csat" or "ces"), never user input.
-func queryDistribution(db *sql.DB, from, to int64, col string, lo, hi int) (Distribution, error) {
+func fillNumeric(db *sql.DB, s *QStat, q surveydef.Question, from, to int64, loc *time.Location) error {
+	// distribution + count, then derive avg / top-box / nps in Go
 	rows, err := db.Query(
-		`SELECT `+col+`, COUNT(*) FROM responses
-		 WHERE submitted_at >= ? AND submitted_at < ? GROUP BY `+col, from, to)
+		`SELECT a.num, COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?
+		 GROUP BY a.num`, q.Key, from, to)
 	if err != nil {
-		return Distribution{}, err
+		return err
 	}
-	defer rows.Close()
-
 	counts := map[int]int{}
 	for rows.Next() {
-		var bucket, n int
-		if err := rows.Scan(&bucket, &n); err != nil {
-			return Distribution{}, err
+		var v, n int
+		if err := rows.Scan(&v, &n); err != nil {
+			rows.Close()
+			return err
 		}
-		counts[bucket] = n
+		counts[v] = n
 	}
-	d := Distribution{}
-	for v := lo; v <= hi; v++ {
-		d.Labels = append(d.Labels, v)
-		d.Data = append(d.Data, counts[v])
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
 	}
-	return d, rows.Err()
+
+	dist := &Distribution{}
+	total, sum, topBox, promoters, detractors := 0, 0, 0, 0, 0
+	for v := q.Min; v <= q.Max; v++ {
+		dist.Labels = append(dist.Labels, v)
+		dist.Data = append(dist.Data, counts[v])
+		total += counts[v]
+		sum += v * counts[v]
+		if v >= q.Max-1 { // top-2-box
+			topBox += counts[v]
+		}
+		if q.Type == surveydef.TypeNPS {
+			if v >= 9 {
+				promoters += counts[v]
+			} else if v <= 6 {
+				detractors += counts[v]
+			}
+		}
+	}
+	s.Count = total
+	s.Distribution = dist
+	if total > 0 {
+		avg := round2(float64(sum) / float64(total))
+		s.Avg = &avg
+		if q.Type == surveydef.TypeStars {
+			tb := round2(100 * float64(topBox) / float64(total))
+			s.TopBoxPct = &tb
+		}
+		if q.Type == surveydef.TypeNPS {
+			nps := round2(100 * float64(promoters-detractors) / float64(total))
+			s.NPS = &nps
+		}
+	}
+
+	trend, err := numericTrend(db, q.Key, from, to, loc)
+	if err != nil {
+		return err
+	}
+	s.Trend = trend
+	return nil
 }
 
-func queryResolution(db *sql.DB, from, to int64) (Breakdown, error) {
+func fillBreakdown(db *sql.DB, s *QStat, q surveydef.Question, from, to int64) error {
 	rows, err := db.Query(
-		`SELECT resolution, COUNT(*) FROM responses
-		 WHERE submitted_at >= ? AND submitted_at < ? GROUP BY resolution`, from, to)
+		`SELECT a.text, COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key = ? AND a.text IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?
+		 GROUP BY a.text`, q.Key, from, to)
 	if err != nil {
-		return Breakdown{}, err
+		return err
+	}
+	counts := map[string]int{}
+	for rows.Next() {
+		var v string
+		var n int
+		if err := rows.Scan(&v, &n); err != nil {
+			rows.Close()
+			return err
+		}
+		counts[v] = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	b := &Breakdown{}
+	total := 0
+	for _, o := range q.Options {
+		b.Labels = append(b.Labels, o.LabelFor("en"))
+		b.Data = append(b.Data, counts[o.Value])
+		total += counts[o.Value]
+	}
+	s.Breakdown = b
+	s.Count = total
+	return nil
+}
+
+type dayAvg struct {
+	n   int
+	sum int
+}
+
+func numericTrend(db *sql.DB, key string, from, to int64, loc *time.Location) (*NumTrend, error) {
+	rows, err := db.Query(
+		`SELECT r.submitted_at, a.num FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?`,
+		key, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	agg := map[string]*dayAvg{}
+	for rows.Next() {
+		var ts int64
+		var num int
+		if err := rows.Scan(&ts, &num); err != nil {
+			return nil, err
+		}
+		day := time.Unix(ts, 0).In(loc).Format("2006-01-02")
+		a := agg[day]
+		if a == nil {
+			a = &dayAvg{}
+			agg[day] = a
+		}
+		a.n++
+		a.sum += num
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	t := &NumTrend{}
+	for _, day := range daysInRange(from, to, loc) {
+		t.Labels = append(t.Labels, day)
+		if a := agg[day]; a != nil && a.n > 0 {
+			t.Avg = append(t.Avg, round2(float64(a.sum)/float64(a.n)))
+		} else {
+			t.Avg = append(t.Avg, 0)
+		}
+	}
+	return t, nil
+}
+
+func responsesTrend(db *sql.DB, from, to int64, loc *time.Location) (ResponsesTrend, error) {
+	rows, err := db.Query(
+		`SELECT submitted_at FROM responses WHERE submitted_at >= ? AND submitted_at < ?`, from, to)
+	if err != nil {
+		return ResponsesTrend{}, err
 	}
 	defer rows.Close()
 	counts := map[string]int{}
 	for rows.Next() {
-		var k string
-		var n int
-		if err := rows.Scan(&k, &n); err != nil {
-			return Breakdown{}, err
-		}
-		counts[k] = n
-	}
-	order := []string{"yes", "partial", "no"}
-	b := Breakdown{Labels: []string{"Resolved", "Partial", "Not resolved"}}
-	for _, k := range order {
-		b.Data = append(b.Data, counts[k])
-	}
-	return b, rows.Err()
-}
-
-type dayAgg struct {
-	n       int
-	csatSum int
-	cesSum  int
-	yes     int
-	top2    int
-}
-
-// queryTrend buckets responses by local calendar day (in loc), filling empty
-// days with zeros. SQLite can't bucket by an IANA zone, so we do it in Go.
-func queryTrend(db *sql.DB, from, to int64, loc *time.Location) (Trend, error) {
-	rows, err := db.Query(
-		`SELECT submitted_at, csat, ces, resolution FROM responses
-		 WHERE submitted_at >= ? AND submitted_at < ?`, from, to)
-	if err != nil {
-		return Trend{}, err
-	}
-	defer rows.Close()
-
-	aggs := map[string]*dayAgg{}
-	for rows.Next() {
 		var ts int64
-		var csat, ces int
-		var res string
-		if err := rows.Scan(&ts, &csat, &ces, &res); err != nil {
-			return Trend{}, err
+		if err := rows.Scan(&ts); err != nil {
+			return ResponsesTrend{}, err
 		}
-		key := time.Unix(ts, 0).In(loc).Format("2006-01-02")
-		a := aggs[key]
-		if a == nil {
-			a = &dayAgg{}
-			aggs[key] = a
-		}
-		a.n++
-		a.csatSum += csat
-		a.cesSum += ces
-		if res == "yes" {
-			a.yes++
-		}
-		if csat >= 4 {
-			a.top2++
-		}
+		counts[time.Unix(ts, 0).In(loc).Format("2006-01-02")]++
 	}
 	if err := rows.Err(); err != nil {
-		return Trend{}, err
+		return ResponsesTrend{}, err
 	}
-
-	var t Trend
+	var t ResponsesTrend
 	for _, day := range daysInRange(from, to, loc) {
 		t.Labels = append(t.Labels, day)
-		a := aggs[day]
-		if a == nil || a.n == 0 {
-			t.Responses = append(t.Responses, 0)
-			t.CSATAvg = append(t.CSATAvg, 0)
-			t.CESAvg = append(t.CESAvg, 0)
-			t.CSATPct = append(t.CSATPct, 0)
-			t.ResolutionRate = append(t.ResolutionRate, 0)
-			continue
-		}
-		t.Responses = append(t.Responses, a.n)
-		t.CSATAvg = append(t.CSATAvg, round2(float64(a.csatSum)/float64(a.n)))
-		t.CESAvg = append(t.CESAvg, round2(float64(a.cesSum)/float64(a.n)))
-		t.CSATPct = append(t.CSATPct, round2(100*float64(a.top2)/float64(a.n)))
-		t.ResolutionRate = append(t.ResolutionRate, round2(float64(a.yes)/float64(a.n)))
+		t.Responses = append(t.Responses, counts[day])
 	}
 	return t, nil
 }
@@ -200,7 +280,7 @@ func daysInRange(from, to int64, loc *time.Location) []string {
 	var out []string
 	for d := start; d.Before(end); d = d.AddDate(0, 0, 1) {
 		out = append(out, d.Format("2006-01-02"))
-		if len(out) > 366 { // safety bound
+		if len(out) > 366 {
 			break
 		}
 	}

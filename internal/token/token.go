@@ -44,12 +44,13 @@ func newGCM(secret string) (cipher.AEAD, error) {
 	return cipher.NewGCM(block)
 }
 
-// Encrypt builds a token for the given caller id, call time (UTC unix seconds),
-// and language tag (e.g. "en", "es"). The caller id and language must not
-// contain the '|' separator; an empty language defaults to "en".
-func Encrypt(secret, callerID string, callTime int64, lang string) (string, error) {
-	if strings.Contains(callerID, "|") {
-		return "", errors.New("caller id must not contain '|'")
+// Encrypt builds a token for the given subject (the entity the survey is about —
+// a phone number, order id, ticket id, …), subject time (UTC unix seconds), and
+// language tag (e.g. "en", "es"). The subject and language must not contain the
+// '|' separator; an empty language defaults to "en".
+func Encrypt(secret, subject string, subjectTime int64, lang string) (string, error) {
+	if strings.Contains(subject, "|") {
+		return "", errors.New("subject must not contain '|'")
 	}
 	if strings.Contains(lang, "|") {
 		return "", errors.New("language must not contain '|'")
@@ -65,15 +66,15 @@ func Encrypt(secret, callerID string, callTime int64, lang string) (string, erro
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	pt := callerID + "|" + strconv.FormatInt(callTime, 10) + "|" + lang
+	pt := subject + "|" + strconv.FormatInt(subjectTime, 10) + "|" + lang
 	sealed := gcm.Seal(nonce, nonce, []byte(pt), nil) // result = nonce || ciphertext||tag
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
 
-// Decrypt validates a token and returns the caller id, call time, and language.
+// Decrypt validates a token and returns the subject, subject time, and language.
 // It returns ErrInvalidToken for anything that does not decrypt to the expected
 // three-field payload.
-func Decrypt(secret, tok string) (callerID string, callTime int64, lang string, err error) {
+func Decrypt(secret, tok string) (subject string, subjectTime int64, lang string, err error) {
 	raw, err := base64.RawURLEncoding.DecodeString(tok)
 	if err != nil || len(raw) < nonceSize {
 		return "", 0, "", ErrInvalidToken

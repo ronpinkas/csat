@@ -44,8 +44,9 @@ theme_color = "#2563eb"
 # logo_path = ""   # optional: an explicit file path that overrides auto-detection
 
 [survey]
-# The survey is shown in the language carried by each link's token (en|es).
-# csat_max/ces_max set the rating scales; wording comes from the built-in en/es catalog.
-csat_max         = 5
-ces_max          = 7
-comment_max_len  = 2000
+# Path to a survey.json defining the questions (types, per-language labels,
+# options). Leave unset to use the built-in default (the CSAT instrument).
+# Copy survey.example.json and edit it to customize. System strings (buttons,
+# errors, "thank you") come from the en/es catalog; question wording lives in
+# the survey.json. The link's language token (en|es) selects both.
+# definition = "/etc/csat/survey.json"

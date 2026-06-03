@@ -3,52 +3,58 @@
 <section class="card survey">
   {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
   <h1>{{.SiteName}}</h1>
-  <p class="lede">{{.T.Lede}}</p>
+  {{if .Intro}}<p class="lede">{{.Intro}}</p>{{end}}
 
   <form method="POST" action="/s?t={{.Token}}">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
 
+    {{range $q := .Questions}}
     <fieldset class="field">
-      <legend>{{.T.CSATLabel}}</legend>
-      <div class="stars" role="radiogroup" aria-label="{{.T.CSATLabel}}">
-        {{range .CSATStars}}
+      <legend>{{$q.Label}}</legend>
+
+      {{if eq $q.Type "stars"}}
+      <div class="stars" role="radiogroup" aria-label="{{$q.Label}}">
+        {{range $v := $q.Stars}}
         <label class="star">
-          <input type="radio" name="csat" value="{{.}}" required>
+          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if $q.Required}}required{{end}}>
           <span aria-hidden="true">★</span>
-          <span class="sr-only">{{.}}</span>
+          <span class="sr-only">{{$v}}</span>
         </label>
         {{end}}
       </div>
-    </fieldset>
 
-    <fieldset class="field">
-      <legend>{{.T.ResolutionLabel}}</legend>
-      <div class="choices">
-        <label class="choice"><input type="radio" name="resolution" value="yes" required> {{.T.ResYes}}</label>
-        <label class="choice"><input type="radio" name="resolution" value="partial"> {{.T.ResPartial}}</label>
-        <label class="choice"><input type="radio" name="resolution" value="no"> {{.T.ResNo}}</label>
-      </div>
-    </fieldset>
-
-    <fieldset class="field">
-      <legend>{{.T.CESLabel}}</legend>
-      <div class="scale" role="radiogroup" aria-label="{{.T.CESLabel}}">
-        {{range .CESScale}}
+      {{else if or (eq $q.Type "scale") (eq $q.Type "nps")}}
+      <div class="scale" role="radiogroup" aria-label="{{$q.Label}}">
+        {{range $v := $q.Scale}}
         <label class="scale-pt">
-          <input type="radio" name="ces" value="{{.}}" required>
-          <span>{{.}}</span>
+          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if $q.Required}}required{{end}}>
+          <span>{{$v}}</span>
         </label>
         {{end}}
       </div>
-      <div class="scale-ends"><span>{{.T.CESHard}}</span><span>{{.T.CESEasy}}</span></div>
-    </fieldset>
+      {{if or $q.EndLow $q.EndHigh}}<div class="scale-ends"><span>{{$q.EndLow}}</span><span>{{$q.EndHigh}}</span></div>{{end}}
 
-    <fieldset class="field">
-      <legend>{{.T.CommentLabel}}</legend>
-      <textarea name="comment" rows="3" maxlength="{{.CommentMaxLen}}" placeholder="{{.T.CommentHint}}"></textarea>
-    </fieldset>
+      {{else if eq $q.Type "choice"}}
+      <div class="choices">
+        {{range $o := $q.Options}}
+        <label class="choice"><input type="radio" name="{{$q.Key}}" value="{{$o.Value}}" {{if $q.Required}}required{{end}}> {{$o.Label}}</label>
+        {{end}}
+      </div>
 
-    <button type="submit" class="btn primary">{{.T.Submit}}</button>
+      {{else if eq $q.Type "multichoice"}}
+      <div class="choices">
+        {{range $o := $q.Options}}
+        <label class="choice"><input type="checkbox" name="{{$q.Key}}" value="{{$o.Value}}"> {{$o.Label}}</label>
+        {{end}}
+      </div>
+
+      {{else if eq $q.Type "text"}}
+      <textarea name="{{$q.Key}}" rows="3" {{if $q.MaxLen}}maxlength="{{$q.MaxLen}}"{{end}} placeholder="{{$q.Placeholder}}" {{if $q.Required}}required{{end}}></textarea>
+      {{end}}
+    </fieldset>
+    {{end}}
+
+    <button type="submit" class="btn primary">{{.Submit}}</button>
   </form>
 </section>
 {{end}}

@@ -1,4 +1,5 @@
-// Package survey serves the public, tokenized CSAT form and records responses.
+// Package survey serves the public, tokenized survey form (defined by a
+// survey.json) and records responses.
 package survey
 
 import (
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/csrf"
+	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/token"
 	"github.com/ronpinkas/csat/internal/web"
 )
@@ -22,14 +24,14 @@ type Handlers struct {
 	db     *sql.DB
 	tmpl   *web.Templates
 	cfg    *config.Config
+	def    *surveydef.Definition
 	secret string
 	secure bool
 }
 
-// New builds the survey handlers. secure marks cookies Secure (set when TLS is
-// terminated by/for the app).
-func New(db *sql.DB, tmpl *web.Templates, cfg *config.Config, secret string, secure bool) *Handlers {
-	return &Handlers{db: db, tmpl: tmpl, cfg: cfg, secret: secret, secure: secure}
+// New builds the survey handlers for the given survey definition.
+func New(db *sql.DB, tmpl *web.Templates, cfg *config.Config, def *surveydef.Definition, secret string, secure bool) *Handlers {
+	return &Handlers{db: db, tmpl: tmpl, cfg: cfg, def: def, secret: secret, secure: secure}
 }
 
 type pageBase struct {
@@ -39,14 +41,33 @@ type pageBase struct {
 	LogoURL  string
 }
 
+// qView is one question prepared for rendering.
+type qView struct {
+	Key         string
+	Type        string
+	Label       string
+	Required    bool
+	Stars       []int // descending (high->low) for the reverse-DOM star widget
+	Scale       []int // ascending min..max for scale/nps
+	EndLow      string
+	EndHigh     string
+	Options     []optView
+	MaxLen      int
+	Placeholder string
+}
+
+type optView struct {
+	Value string
+	Label string
+}
+
 type surveyData struct {
 	pageBase
-	T             messages
-	Token         string
-	CSRF          string
-	CSATStars     []int // descending (high->low) for the reverse-DOM star widget
-	CESScale      []int // ascending 1..max
-	CommentMaxLen int
+	Token     string
+	CSRF      string
+	Intro     string
+	Submit    string
+	Questions []qView
 }
 
 type doneData struct {
@@ -63,24 +84,24 @@ type errData struct {
 
 // Form handles GET /s — validate the token and render the survey.
 func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
-	callerID, callTime, lang, ok := h.decode(r)
+	subject, subjectTime, lang, ok := h.decode(r)
 	if !ok {
 		h.renderInvalid(w, "en")
 		return
 	}
-	t := stringsFor(lang)
-	if h.alreadyUsed(callerID, callTime) {
+	if h.alreadyUsed(subject, subjectTime) {
+		t := stringsFor(lang)
 		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
 		return
 	}
+	t := stringsFor(lang)
 	h.render(w, "survey.tmpl", surveyData{
-		pageBase:      h.base(lang),
-		T:             t,
-		Token:         r.URL.Query().Get("t"),
-		CSRF:          csrf.Issue(w, h.secure),
-		CSATStars:     scaleDesc(h.cfg.Survey.CSATMax),
-		CESScale:      scale(1, h.cfg.Survey.CESMax),
-		CommentMaxLen: h.cfg.Survey.CommentMaxLen,
+		pageBase:  h.base(lang),
+		Token:     r.URL.Query().Get("t"),
+		CSRF:      csrf.Issue(w, h.secure),
+		Intro:     h.def.IntroFor(lang),
+		Submit:    t.Submit,
+		Questions: h.questions(lang),
 	})
 }
 
@@ -90,7 +111,7 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 		h.renderInvalid(w, "en")
 		return
 	}
-	callerID, callTime, lang, ok := h.decode(r)
+	subject, subjectTime, lang, ok := h.decode(r)
 	if !ok {
 		h.renderInvalid(w, "en")
 		return
@@ -100,18 +121,15 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusForbidden, lang, t.ErrGenericHeading, t.ErrSessionMsg)
 		return
 	}
-	sub, err := parseSubmission(
-		r.PostFormValue("csat"), r.PostFormValue("resolution"), r.PostFormValue("ces"), r.PostFormValue("comment"),
-		h.cfg.Survey.CSATMax, h.cfg.Survey.CESMax, h.cfg.Survey.CommentMaxLen,
-	)
-	if err != nil {
+	answers, valid := parseAnswers(r.PostForm, h.def)
+	if !valid {
 		h.renderError(w, http.StatusBadRequest, lang, t.ErrFormHeading, t.ErrFormMsg)
 		return
 	}
 
-	switch h.store(callerID, callTime, sub) {
+	switch h.store(subject, subjectTime, lang, answers) {
 	case storeOK:
-		h.renderDone(w, lang, t.DoneTitle, t.DoneMsg)
+		h.renderDone(w, lang, t.DoneTitle, h.def.ThanksFor(lang))
 	case storeAlreadyUsed:
 		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
 	default:
@@ -119,27 +137,56 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// questions builds the localized render models for the form.
+func (h *Handlers) questions(lang string) []qView {
+	out := make([]qView, 0, len(h.def.Questions))
+	for _, q := range h.def.Questions {
+		v := qView{
+			Key:         q.Key,
+			Type:        q.Type,
+			Label:       q.LabelFor(lang),
+			Required:    q.Required,
+			EndLow:      q.EndLow(lang),
+			EndHigh:     q.EndHigh(lang),
+			MaxLen:      q.MaxLen,
+			Placeholder: q.PlaceholderFor(lang),
+		}
+		switch q.Type {
+		case surveydef.TypeStars:
+			v.Stars = descend(q.Max)
+		case surveydef.TypeScale, surveydef.TypeNPS:
+			v.Scale = q.Scale()
+		case surveydef.TypeChoice, surveydef.TypeMultiChoice:
+			for _, o := range q.Options {
+				v.Options = append(v.Options, optView{Value: o.Value, Label: o.LabelFor(lang)})
+			}
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
 // decode extracts and validates the token from the request query.
-func (h *Handlers) decode(r *http.Request) (callerID string, callTime int64, lang string, ok bool) {
+func (h *Handlers) decode(r *http.Request) (subject string, subjectTime int64, lang string, ok bool) {
 	tok := r.URL.Query().Get("t")
 	if tok == "" {
 		return "", 0, "", false
 	}
-	cid, ts, lng, err := token.Decrypt(h.secret, tok)
+	subj, ts, lng, err := token.Decrypt(h.secret, tok)
 	if err != nil {
 		return "", 0, "", false
 	}
-	if len(cid) == 0 || len(cid) > 32 {
+	if len(subj) == 0 || len(subj) > 128 {
 		return "", 0, "", false
 	}
-	return cid, ts, normalizeLang(lng), true
+	return subj, ts, normalizeLang(lng), true
 }
 
-func (h *Handlers) alreadyUsed(callerID string, callTime int64) bool {
+func (h *Handlers) alreadyUsed(subject string, subjectTime int64) bool {
 	var n int
 	err := h.db.QueryRow(
-		`SELECT COUNT(*) FROM used_tokens WHERE caller_id = ? AND call_time = ?`,
-		callerID, callTime,
+		`SELECT COUNT(*) FROM used_tokens WHERE subject = ? AND subject_time = ?`,
+		subject, subjectTime,
 	).Scan(&n)
 	return err == nil && n > 0
 }
@@ -152,9 +199,9 @@ const (
 	storeError
 )
 
-// store inserts the response and marks the token used in one transaction. The
-// used_tokens PRIMARY KEY enforces single submission.
-func (h *Handlers) store(callerID string, callTime int64, s submission) storeResult {
+// store inserts the response, its answers, and the used-token marker in one
+// transaction. The used_tokens PRIMARY KEY enforces single submission.
+func (h *Handlers) store(subject string, subjectTime int64, lang string, answers []answer) storeResult {
 	now := time.Now().Unix()
 	tx, err := h.db.Begin()
 	if err != nil {
@@ -164,9 +211,8 @@ func (h *Handlers) store(callerID string, callTime int64, s submission) storeRes
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO responses(caller_id, call_time, csat, resolution, ces, comment, submitted_at)
-		 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		callerID, callTime, s.csat, s.resolution, s.ces, s.comment, now,
+		`INSERT INTO responses(subject, subject_time, lang, submitted_at) VALUES(?, ?, ?, ?)`,
+		subject, subjectTime, lang, now,
 	)
 	if err != nil {
 		log.Printf("survey: insert response: %v", err)
@@ -174,9 +220,19 @@ func (h *Handlers) store(callerID string, callTime int64, s submission) storeRes
 	}
 	respID, _ := res.LastInsertId()
 
+	for _, a := range answers {
+		if _, err := tx.Exec(
+			`INSERT INTO answers(response_id, question_key, num, text) VALUES(?, ?, ?, ?)`,
+			respID, a.key, numArg(a.num), textArg(a.text),
+		); err != nil {
+			log.Printf("survey: insert answer %q: %v", a.key, err)
+			return storeError
+		}
+	}
+
 	if _, err := tx.Exec(
-		`INSERT INTO used_tokens(caller_id, call_time, used_at, response_id) VALUES(?, ?, ?, ?)`,
-		callerID, callTime, now, respID,
+		`INSERT INTO used_tokens(subject, subject_time, used_at, response_id) VALUES(?, ?, ?, ?)`,
+		subject, subjectTime, now, respID,
 	); err != nil {
 		if isUniqueViolation(err) {
 			return storeAlreadyUsed
@@ -194,6 +250,19 @@ func (h *Handlers) store(callerID string, callTime int64, s submission) storeRes
 	return storeOK
 }
 
+func numArg(n *int) any {
+	if n == nil {
+		return nil
+	}
+	return *n
+}
+func textArg(s *string) any {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(strings.ToUpper(err.Error()), "CONSTRAINT FAILED")
 }
@@ -202,10 +271,8 @@ func isUniqueViolation(err error) bool {
 
 var hexColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
 
-// Logo serves the resolved logo file (or 404 when none is available). The path
-// is resolved per request, so dropping/replacing a logo file takes effect
-// without a restart; no-cache lets browsers pick up a replacement (via a
-// conditional request) rather than serving a stale image.
+// Logo serves the resolved logo file (or 404 when none is available), resolved
+// per request so dropping/replacing a logo takes effect without a restart.
 func (h *Handlers) Logo(w http.ResponseWriter, r *http.Request) {
 	path := h.cfg.Branding.ResolveLogo()
 	if path == "" {
@@ -216,8 +283,8 @@ func (h *Handlers) Logo(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-// ThemeCSS serves a tiny stylesheet that sets the brand color as a CSS variable.
-// Done as a same-origin stylesheet so the strict CSP (no inline styles) holds.
+// ThemeCSS serves a tiny stylesheet setting the brand color as a CSS variable
+// (a same-origin stylesheet, so the strict no-inline-styles CSP holds).
 func (h *Handlers) ThemeCSS(w http.ResponseWriter, r *http.Request) {
 	color := h.cfg.Branding.ThemeColor
 	if !hexColorRE.MatchString(color) {
@@ -238,8 +305,6 @@ func (h *Handlers) base(lang string) pageBase {
 	}
 }
 
-// write renders a template into a buffer first, so headers/status are set
-// correctly and a template error never emits a half-written page.
 func (h *Handlers) write(w http.ResponseWriter, status int, name string, data any) {
 	var buf bytes.Buffer
 	if err := h.tmpl.Render(&buf, name, data); err != nil {
@@ -269,16 +334,8 @@ func (h *Handlers) renderInvalid(w http.ResponseWriter, lang string) {
 	h.renderError(w, http.StatusBadRequest, lang, t.ErrInvalidHeading, t.ErrInvalidMsg)
 }
 
-func scale(lo, hi int) []int {
-	out := make([]int, 0, hi-lo+1)
-	for i := lo; i <= hi; i++ {
-		out = append(out, i)
-	}
-	return out
-}
-
-// scaleDesc returns hi, hi-1, ... 1 (for the reverse-DOM star widget).
-func scaleDesc(hi int) []int {
+// descend returns hi, hi-1, ... 1 (for the reverse-DOM star widget).
+func descend(hi int) []int {
 	out := make([]int, 0, hi)
 	for i := hi; i >= 1; i-- {
 		out = append(out, i)

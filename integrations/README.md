@@ -4,7 +4,7 @@ Drop-in functions for your call platform to mint a CSAT survey link at end of ca
 a token byte-for-byte compatible with the CSAT server's validation (verified against a live
 server). Use the same `crypto_secret` as the deployment (copy it from the admin `/settings` page).
 
-Token = `base64url_nopad( nonce(12B) || AES-256-GCM_seal(key, nonce, "callerID|callTime|lang") )`,
+Token = `base64url_nopad( nonce(12B) || AES-256-GCM_seal(key, nonce, "subject|subjectTime|lang") )`,
 where `key = SHA-256(crypto_secret)`. `lang` is `en` or `es`. The link is `<base>/s?t=<token>`.
 
 ## Python (`mint_link.py`)
@@ -14,8 +14,8 @@ Requires `pip install cryptography`.
 from mint_link import mint_link
 
 url = mint_link("https://csat.example.com", CRYPTO_SECRET,
-                caller_id="+15551234567", call_time=1717286400, lang="es")
-# then SMS `url` to the caller
+                subject="+15551234567", subject_time=1717286400, lang="es")
+# then SMS `url` to the customer
 ```
 
 ## Node.js (`mint_link.js`)
@@ -31,6 +31,6 @@ const url = mintLink("https://csat.example.com", CRYPTO_SECRET,
 ## CLI (handy for testing)
 ```sh
 export CSAT_CRYPTO_SECRET="...the deployment secret..."
-python3 mint_link.py --cid +15551234567 --lang es --base https://csat.example.com
-node    mint_link.js  --cid +15551234567 --lang es --base https://csat.example.com
+python3 mint_link.py --subject +15551234567 --lang es --base https://csat.example.com
+node    mint_link.js  --subject +15551234567 --lang es --base https://csat.example.com
 ```
