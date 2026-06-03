@@ -16,11 +16,13 @@ instrument by default; define your own questions in a `survey.json`.
 
 ## Screenshots
 
-Admin dashboard — date-range KPIs, trend over time, distributions, resolution, and recent comments:
+Admin dashboard — **auto-adapts to your questions**: per-question KPIs, NPS, distributions,
+choice/multichoice breakdowns, daily trend, and recent comments, over a selectable date range:
 
-![CSAT admin dashboard](docs/screenshots/dashboard.png)
+![Admin dashboard](docs/screenshots/dashboard.png)
 
-The customer survey, localized by the link's language token, with a per-deployment logo + theme:
+The customer survey (here the rich `survey.example.json` — stars, NPS, choice, multichoice,
+scale, text), localized by the link's language token, with a per-deployment logo + theme:
 
 | English | Español |
 |:---:|:---:|

@@ -1,12 +1,12 @@
 {
   "version": 1,
   "intro": {
-    "en": "Thanks for your call. How did we do? It takes about 20 seconds.",
-    "es": "Gracias por su llamada. ¿Cómo lo hicimos? Toma unos 20 segundos."
+    "en": "Thanks for contacting Acme Support — a few quick questions, about 30 seconds.",
+    "es": "Gracias por contactar a Acme Support — unas preguntas rápidas, unos 30 segundos."
   },
   "thanks": {
-    "en": "Your feedback has been recorded. We appreciate you taking the time.",
-    "es": "Hemos registrado sus comentarios. Agradecemos su tiempo."
+    "en": "Thank you! Your feedback helps us improve.",
+    "es": "¡Gracias! Sus comentarios nos ayudan a mejorar."
   },
   "questions": [
     {
@@ -17,6 +17,19 @@
       "label": {
         "en": "Overall, how satisfied were you?",
         "es": "En general, ¿qué tan satisfecho/a quedó?"
+      }
+    },
+    {
+      "key": "recommend",
+      "type": "nps",
+      "required": true,
+      "label": {
+        "en": "How likely are you to recommend us to a friend?",
+        "es": "¿Qué tan probable es que nos recomiende a un amigo?"
+      },
+      "ends": {
+        "low": { "en": "Not at all likely", "es": "Nada probable" },
+        "high": { "en": "Extremely likely", "es": "Muy probable" }
       }
     },
     {
@@ -31,6 +44,20 @@
         { "value": "yes", "label": { "en": "Yes", "es": "Sí" } },
         { "value": "partial", "label": { "en": "Partially", "es": "Parcialmente" } },
         { "value": "no", "label": { "en": "No", "es": "No" } }
+      ]
+    },
+    {
+      "key": "topics",
+      "type": "multichoice",
+      "label": {
+        "en": "What did we help with? (choose any)",
+        "es": "¿En qué le ayudamos? (elija las que apliquen)"
+      },
+      "options": [
+        { "value": "billing", "label": { "en": "Billing", "es": "Facturación" } },
+        { "value": "technical", "label": { "en": "Technical", "es": "Técnico" } },
+        { "value": "account", "label": { "en": "Account", "es": "Cuenta" } },
+        { "value": "sales", "label": { "en": "Sales", "es": "Ventas" } }
       ]
     },
     {
