@@ -26,6 +26,10 @@ type User struct {
 	Role         string
 	MustChangePW bool
 	Active       bool
+	// ResetRequested reports a pending self-service password-reset request. It
+	// is populated only by listUsers (the admin view); the auth-path scans
+	// leave it false.
+	ResetRequested bool
 }
 
 // Session is a server-side session.
@@ -80,17 +84,22 @@ func countUsers(db *sql.DB) (int, error) {
 
 func listUsers(db *sql.DB) ([]User, error) {
 	rows, err := db.Query(
-		`SELECT id, username, password_hash, role, must_change_pw, active FROM users ORDER BY username`)
+		`SELECT id, username, password_hash, role, must_change_pw, active, reset_requested_at
+		 FROM users ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []User
 	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.MustChangePW, &u.Active); err != nil {
+		var (
+			u   User
+			req sql.NullInt64
+		)
+		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &u.MustChangePW, &u.Active, &req); err != nil {
 			return nil, err
 		}
+		u.ResetRequested = req.Valid
 		out = append(out, u)
 	}
 	return out, rows.Err()
@@ -108,6 +117,47 @@ func setLastLogin(db *sql.DB, userID int64) {
 func deactivateUser(db *sql.DB, userID int64) error {
 	_, err := db.Exec(`UPDATE users SET active = 0 WHERE id = ?`, userID)
 	return err
+}
+
+// requestPasswordReset flags an outstanding reset request for the named user.
+// A non-existent username is a no-op (and silently reports no error) so the
+// public handler can keep its response uniform and avoid user enumeration.
+func requestPasswordReset(db *sql.DB, username string) error {
+	_, err := db.Exec(
+		`UPDATE users SET reset_requested_at = ? WHERE username = ?`, time.Now().Unix(), username)
+	return err
+}
+
+func clearResetRequest(db *sql.DB, userID int64) error {
+	_, err := db.Exec(`UPDATE users SET reset_requested_at = NULL WHERE id = ?`, userID)
+	return err
+}
+
+// deleteUser permanently removes a user and the rows that reference them.
+// sessions and password_resets cascade automatically; invites do not (and
+// invites.created_by is NOT NULL), so we drop the user's invite rows here,
+// inside the same transaction, or the DELETE would fail the FK constraint.
+func deleteUser(db *sql.DB, userID int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
+		`DELETE FROM invites WHERE created_by = ? OR redeemed_user_id = ?`, userID, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM users WHERE id = ?`, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// adminCount returns the total number of admin accounts (active or not).
+func adminCount(db *sql.DB) int {
+	var n int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = ?`, RoleAdmin).Scan(&n)
+	return n
 }
 
 // ---- sessions ----

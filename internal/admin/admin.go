@@ -88,6 +88,7 @@ func (a *Admin) sweepLoop() {
 	for range t.C {
 		sweepSessions(a.db)
 		sweepInvites(a.db)
+		sweepResets(a.db)
 	}
 }
 
