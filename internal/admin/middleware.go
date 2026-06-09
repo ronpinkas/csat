@@ -17,6 +17,10 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /login", rl(http.HandlerFunc(a.login)))
 	mux.Handle("GET /invite", http.HandlerFunc(a.inviteRedeemForm))
 	mux.Handle("POST /invite", rl(http.HandlerFunc(a.inviteRedeem)))
+	mux.Handle("GET /forgot", http.HandlerFunc(a.forgotForm))
+	mux.Handle("POST /forgot", rl(http.HandlerFunc(a.forgot)))
+	mux.Handle("GET /reset", http.HandlerFunc(a.resetForm))
+	mux.Handle("POST /reset", rl(http.HandlerFunc(a.reset)))
 
 	// session required
 	mux.Handle("GET /{$}", a.authed(a.home))
@@ -33,6 +37,8 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /users", a.adminOnly(a.usersPage))
 	mux.Handle("POST /users/invite", a.adminCSRF(a.createInvite))
 	mux.Handle("POST /users/deactivate", a.adminCSRF(a.deactivate))
+	mux.Handle("POST /users/reset", a.adminCSRF(a.resetUser))
+	mux.Handle("POST /users/delete", a.adminCSRF(a.deleteUser))
 }
 
 // ---- middleware composition helpers ----

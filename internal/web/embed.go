@@ -33,6 +33,8 @@ var pageTemplates = []string{
 	"login.tmpl",
 	"force_change.tmpl",
 	"invite_redeem.tmpl",
+	"forgot.tmpl",
+	"reset.tmpl",
 	"dashboard.tmpl",
 	"users.tmpl",
 	"settings.tmpl",

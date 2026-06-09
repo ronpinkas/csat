@@ -10,6 +10,7 @@ type usersView struct {
 	base
 	Users      []User
 	InviteLink string
+	ResetLink  string
 	Error      string
 }
 
@@ -18,17 +19,23 @@ func (a *Admin) usersPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Admin) renderUsers(w http.ResponseWriter, r *http.Request, inviteLink, errMsg string) {
+	a.renderUsersView(w, r, usersView{InviteLink: inviteLink, Error: errMsg})
+}
+
+// renderUsersWithReset re-renders the page showing a freshly minted reset link.
+func (a *Admin) renderUsersWithReset(w http.ResponseWriter, r *http.Request, resetLink string) {
+	a.renderUsersView(w, r, usersView{ResetLink: resetLink})
+}
+
+func (a *Admin) renderUsersView(w http.ResponseWriter, r *http.Request, v usersView) {
 	users, err := listUsers(a.db)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	a.render(w, http.StatusOK, "users.tmpl", usersView{
-		base:       a.newBase(r),
-		Users:      users,
-		InviteLink: inviteLink,
-		Error:      errMsg,
-	})
+	v.base = a.newBase(r)
+	v.Users = users
+	a.render(w, http.StatusOK, "users.tmpl", v)
 }
 
 func (a *Admin) createInvite(w http.ResponseWriter, r *http.Request) {
