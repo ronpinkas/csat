@@ -11,24 +11,32 @@
 "use strict";
 const crypto = require("crypto");
 
-/** Return the opaque survey token (the value for the ?t= query param). */
-function mintToken(cryptoSecret, subject, subjectTime, lang = "en") {
-  if (subject.includes("|") || (lang && lang.includes("|"))) {
-    throw new Error("subject and lang must not contain '|'");
+/**
+ * Return the opaque survey token (the value for the ?t= query param).
+ *
+ * ref binds the token to a tenant in the server's multi-tenant mode; leave it
+ * empty for a single-tenant deployment (the field is then omitted entirely, so
+ * existing links stay byte-for-byte identical).
+ */
+function mintToken(cryptoSecret, subject, subjectTime, lang = "en", ref = "") {
+  if (subject.includes("|") || (lang && lang.includes("|")) || (ref && ref.includes("|"))) {
+    throw new Error("subject, lang, and ref must not contain '|'");
   }
   lang = lang || "en";
   const key = crypto.createHash("sha256").update(cryptoSecret, "utf8").digest(); // 32-byte key
   const nonce = crypto.randomBytes(12);                                          // fresh nonce
   const cipher = crypto.createCipheriv("aes-256-gcm", key, nonce);
-  const plaintext = Buffer.from(`${subject}|${Math.trunc(subjectTime)}|${lang}`, "utf8");
+  let payload = `${subject}|${Math.trunc(subjectTime)}|${lang}`;
+  if (ref) payload += `|${ref}`;
+  const plaintext = Buffer.from(payload, "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();                                               // 16-byte tag
   return Buffer.concat([nonce, ciphertext, tag]).toString("base64url");          // no padding
 }
 
 /** Return the full survey URL to text to the customer. */
-function mintLink(baseUrl, cryptoSecret, subject, subjectTime, lang = "en") {
-  const token = mintToken(cryptoSecret, subject, subjectTime, lang);
+function mintLink(baseUrl, cryptoSecret, subject, subjectTime, lang = "en", ref = "") {
+  const token = mintToken(cryptoSecret, subject, subjectTime, lang, ref);
   return `${baseUrl.replace(/\/+$/, "")}/s?t=${token}`;
 }
 
@@ -45,5 +53,5 @@ if (require.main === module) {
   if (!secret) { console.error("provide --secret or set CSAT_CRYPTO_SECRET"); process.exit(1); }
   if (!args.subject) { console.error("--subject is required"); process.exit(1); }
   const ts = args.ts ? parseInt(args.ts, 10) : Math.floor(Date.now() / 1000);
-  console.log(mintLink(args.base || "https://csat.example.com", secret, args.subject, ts, args.lang || "en"));
+  console.log(mintLink(args.base || "https://csat.example.com", secret, args.subject, ts, args.lang || "en", args.ref || ""));
 }

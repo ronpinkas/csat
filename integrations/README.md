@@ -4,8 +4,12 @@ Drop-in functions for your call platform to mint a CSAT survey link at end of ca
 a token byte-for-byte compatible with the CSAT server's validation (verified against a live
 server). Use the same `crypto_secret` as the deployment (copy it from the admin `/settings` page).
 
-Token = `base64url_nopad( nonce(12B) || AES-256-GCM_seal(key, nonce, "subject|subjectTime|lang") )`,
+Token = `base64url_nopad( nonce(12B) || AES-256-GCM_seal(key, nonce, "subject|subjectTime|lang[|ref]") )`,
 where `key = SHA-256(crypto_secret)`. `lang` is `en` or `es`. The link is `<base>/s?t=<token>`.
+
+`ref` is optional: pass the tenant id when the server runs in **multi-tenant** mode, and omit it
+for a single-tenant deployment (the field is left out entirely, so single-tenant links are
+unchanged). Both builders take it as a trailing `ref` argument / `--ref` flag.
 
 ## Python (`mint_link.py`)
 Requires `pip install cryptography`.
@@ -33,4 +37,7 @@ const url = mintLink("https://csat.example.com", CRYPTO_SECRET,
 export CSAT_CRYPTO_SECRET="...the deployment secret..."
 python3 mint_link.py --subject +15551234567 --lang es --base https://csat.example.com
 node    mint_link.js  --subject +15551234567 --lang es --base https://csat.example.com
+
+# multi-tenant: bind the link to a tenant
+python3 mint_link.py --subject +15551234567 --lang es --ref acme.com --base https://csat.example.com
 ```

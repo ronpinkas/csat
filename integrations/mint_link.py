@@ -17,21 +17,28 @@ import secrets
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
-def mint_token(crypto_secret: str, subject: str, subject_time: int, lang: str = "en") -> str:
-    """Return the opaque survey token (the value for the ?t= query param)."""
-    if "|" in subject or "|" in lang:
-        raise ValueError("subject and lang must not contain '|'")
+def mint_token(crypto_secret: str, subject: str, subject_time: int, lang: str = "en", ref: str = "") -> str:
+    """Return the opaque survey token (the value for the ?t= query param).
+
+    ref binds the token to a tenant in the server's multi-tenant mode; leave it
+    empty for a single-tenant deployment (the field is then omitted entirely, so
+    existing links stay byte-for-byte identical).
+    """
+    if "|" in subject or "|" in lang or "|" in ref:
+        raise ValueError("subject, lang, and ref must not contain '|'")
     lang = lang or "en"
     key = hashlib.sha256(crypto_secret.encode("utf-8")).digest()       # 32-byte AES-256 key
     nonce = secrets.token_bytes(12)                                    # fresh random nonce
-    plaintext = f"{subject}|{int(subject_time)}|{lang}".encode("utf-8")
-    sealed = AESGCM(key).encrypt(nonce, plaintext, None)               # ciphertext || 16-byte tag
+    payload = f"{subject}|{int(subject_time)}|{lang}"
+    if ref:
+        payload += f"|{ref}"
+    sealed = AESGCM(key).encrypt(nonce, payload.encode("utf-8"), None)  # ciphertext || 16-byte tag
     return base64.urlsafe_b64encode(nonce + sealed).rstrip(b"=").decode("ascii")
 
 
-def mint_link(base_url: str, crypto_secret: str, subject: str, subject_time: int, lang: str = "en") -> str:
+def mint_link(base_url: str, crypto_secret: str, subject: str, subject_time: int, lang: str = "en", ref: str = "") -> str:
     """Return the full survey URL to text to the customer."""
-    token = mint_token(crypto_secret, subject, subject_time, lang)
+    token = mint_token(crypto_secret, subject, subject_time, lang, ref)
     return f"{base_url.rstrip('/')}/s?t={token}"
 
 
@@ -46,7 +53,8 @@ if __name__ == "__main__":
     p.add_argument("--subject", required=True, help="subject (phone, order id, ticket id…)")
     p.add_argument("--ts", type=int, default=int(time.time()), help="subject time, unix seconds")
     p.add_argument("--lang", default="en", help="en | es")
+    p.add_argument("--ref", default="", help="tenant ref (multi-tenant mode; empty = single-tenant)")
     a = p.parse_args()
     if not a.secret:
         p.error("provide --secret or set CSAT_CRYPTO_SECRET")
-    print(mint_link(a.base, a.secret, a.subject, a.ts, a.lang))
+    print(mint_link(a.base, a.secret, a.subject, a.ts, a.lang, a.ref))
