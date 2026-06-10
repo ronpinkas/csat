@@ -111,7 +111,11 @@ type Server struct {
 	// not terminate TLS itself — set it when running behind a TLS-terminating
 	// reverse proxy (e.g. Caddy in the appliance). Autocert mode implies it.
 	SecureCookies bool `toml:"secure_cookies"`
-	TLS           TLS  `toml:"tls"`
+	// CorsOrigins are the exact browser origins allowed to read cross-origin
+	// responses from token-gated platform endpoints (currently /provision, which
+	// a platform admin page fetches). Empty = no CORS (server-to-server only).
+	CorsOrigins []string `toml:"cors_origins"`
+	TLS         TLS      `toml:"tls"`
 }
 
 type TLS struct {

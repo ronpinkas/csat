@@ -14,7 +14,7 @@ import (
 func TestSSOSignsInAndAutoProvisions(t *testing.T) {
 	srv, prov := newMultiServer(t)
 
-	tok, err := token.Encrypt(multiSecret, SSOPrefix+"owner", time.Now().Add(time.Hour).Unix(), "admin", "acme.com")
+	tok, err := MintApplianceToken(multiSecret, "acme.com", "owner", "admin", "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

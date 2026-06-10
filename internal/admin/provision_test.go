@@ -14,7 +14,7 @@ const multiSecret = "multi-secret-32bytes-minimum-aaaaaa"
 
 func provisionToken(t *testing.T, ref string, ttl time.Duration) string {
 	t.Helper()
-	tok, err := token.Encrypt(multiSecret, ProvisionSubject, time.Now().Add(ttl).Unix(), "", ref)
+	tok, err := MintApplianceToken(multiSecret, ref, "", "", "", ttl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestProvisionRejectsBadToken(t *testing.T) {
 	if code, _ := postForm(t, newClient(t), srv.URL+"/provision?t="+surveyTok, url.Values{}); code != http.StatusForbidden {
 		t.Fatalf("survey token: want 403, got %d", code)
 	}
-	expired, _ := token.Encrypt(multiSecret, ProvisionSubject, time.Now().Add(-time.Hour).Unix(), "", "acme.com")
+	expired, _ := MintApplianceToken(multiSecret, "acme.com", "", "", "", -time.Hour)
 	if code, _ := postForm(t, newClient(t), srv.URL+"/provision?t="+expired, url.Values{}); code != http.StatusForbidden {
 		t.Fatalf("expired token: want 403, got %d", code)
 	}

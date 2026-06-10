@@ -112,3 +112,36 @@ func Decrypt(secret, tok string) (subject string, subjectTime int64, lang, ref s
 	}
 	return parts[0], ts, parts[2], ref, nil
 }
+
+// SignRaw signs an arbitrary plaintext (same recipe as Encrypt: AES-256-GCM,
+// nonce-prepended, base64url), for layouts the structured Encrypt/Decrypt don't
+// model — e.g. the platform "SEC|payload" appliance tokens.
+func SignRaw(secret, plaintext string) (string, error) {
+	gcm, err := newGCM(secret)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, nonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(plaintext), nil)), nil
+}
+
+// DecryptRaw decrypts a token and returns its raw plaintext (no field parsing).
+func DecryptRaw(secret, tok string) (string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(tok)
+	if err != nil || len(raw) < nonceSize {
+		return "", ErrInvalidToken
+	}
+	gcm, err := newGCM(secret)
+	if err != nil {
+		return "", err
+	}
+	nonce, ciphertext := raw[:nonceSize], raw[nonceSize:]
+	pt, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", ErrInvalidToken
+	}
+	return string(pt), nil
+}

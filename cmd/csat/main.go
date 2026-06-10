@@ -80,8 +80,7 @@ func main() {
 		if *mintRef == "" {
 			log.Fatal("mint-tenant: -ref is required")
 		}
-		expiry := time.Now().Unix() + *mintTTL
-		tok, err := token.Encrypt(secret, admin.ProvisionSubject, expiry, "", *mintRef)
+		tok, err := admin.MintApplianceToken(secret, *mintRef, "", "", "", time.Duration(*mintTTL)*time.Second)
 		if err != nil {
 			log.Fatalf("mint-tenant: %v", err)
 		}

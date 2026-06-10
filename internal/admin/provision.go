@@ -5,21 +5,24 @@ import (
 	"time"
 
 	"github.com/ronpinkas/csat/internal/defstore"
-	"github.com/ronpinkas/csat/internal/token"
 )
 
-// ProvisionSubject is the reserved token subject that marks a tenant-provisioning
-// token (vs. a survey token). subjectTime carries the not-after expiry and ref
-// the tenant to create. (Restricting which tenant user this is for is a platform
-// policy; csat just returns an unconditional admin invite.)
-const ProvisionSubject = "__provision__"
-
-// provision creates (or ensures) a tenant from a platform-signed token and
-// returns an admin invite link as JSON. Multi-tenant only; the token must be
-// signed with the deployment crypto secret, so only the platform (which shares
-// that secret) can call it. The returned invite creates the tenant's first
+// provision creates (or ensures) a tenant from a platform appliance token and
+// returns an admin invite link as JSON. Multi-tenant only; the token's trusted
+// SEC context (see appliance.go) names the tenant, so only the platform (which
+// shares the secret) can call it. The returned invite creates the tenant's first
 // admin — no shared password is involved.
 func (a *Admin) provision(w http.ResponseWriter, r *http.Request) {
+	// Let an allow-listed platform admin page read the invite link cross-origin.
+	if origin := r.Header.Get("Origin"); origin != "" {
+		for _, o := range a.cfg.Server.CorsOrigins {
+			if o == origin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				break
+			}
+		}
+	}
 	if !a.provider.Multi() {
 		http.Error(w, "provisioning is only available in multi-tenant mode", http.StatusBadRequest)
 		return
@@ -29,15 +32,12 @@ func (a *Admin) provision(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		tok = r.PostFormValue("t")
 	}
-	subject, expiry, _, ref, err := token.Decrypt(a.secret, tok)
-	if err != nil || subject != ProvisionSubject || ref == "" {
+	sec, _, err := parseAppliance(a.secret, tok)
+	if err != nil {
 		http.Error(w, "invalid provisioning token", http.StatusForbidden)
 		return
 	}
-	if expiry != 0 && time.Now().Unix() > expiry {
-		http.Error(w, "provisioning token expired", http.StatusForbidden)
-		return
-	}
+	ref := sec.Ref
 
 	db, err := a.provider.DB(ref)
 	if err != nil {
