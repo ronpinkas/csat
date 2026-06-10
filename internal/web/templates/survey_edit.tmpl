@@ -14,18 +14,29 @@
 {{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
 
 <section class="card">
-  <h3>Question set</h3>
-  <p class="muted">Editing publishes a <strong>new</strong> question set (id increases); existing sets stay
-  usable and their past responses keep their original questions. New survey links use the latest set
-  unless a link names a specific <code>&amp;set=&lt;id&gt;</code>. The dashboard can view any set.</p>
-  <form method="POST" action="/survey">
+  <p class="muted">Design your survey below. <strong>Publishing</strong> creates a new question set
+  (id increases); existing sets stay usable and keep their past responses. New survey links use the
+  latest set unless a link names a specific <code>&amp;set=&lt;id&gt;</code>; the dashboard can view
+  any set. Editing set #{{.SetID}}.</p>
+
+  <form method="POST" action="/survey" id="survey-form">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <div class="form-row">
-      <label for="definition">Definition (JSON) — editing set #{{.SetID}}</label>
-      <textarea id="definition" name="definition" rows="22" spellcheck="false"
-        style="width:100%;font-family:ui-monospace,monospace;font-size:13px">{{.JSON}}</textarea>
+    <input type="hidden" name="definition" id="definition-json">
+
+    <div id="designer"></div>
+
+    <div class="designer-actions">
+      <button class="btn ghost" type="button" id="add-question">+ Add question</button>
+      <button class="btn primary" type="submit">Publish as new set</button>
     </div>
-    <button class="btn primary" type="submit">Publish as new set</button>
+
+    <details class="advanced">
+      <summary>Advanced — raw JSON</summary>
+      <p class="muted">The visual designer is the source of truth on Publish. Edit here and
+      <button class="btn ghost" type="button" id="load-json">Load into designer</button> to round-trip.</p>
+      <textarea id="definition-raw" rows="16" spellcheck="false"
+        style="width:100%;font-family:ui-monospace,monospace;font-size:13px">{{.JSON}}</textarea>
+    </details>
   </form>
 </section>
 
@@ -37,11 +48,15 @@
       {{range .Sets}}
       <tr>
         <td>#{{.ID}}{{if .Latest}} · <strong>latest</strong>{{end}}</td>
-        <td><a href="/survey?set={{.ID}}">Open in editor</a></td>
+        <td><a href="/survey?set={{.ID}}">Open in designer</a></td>
         <td><a href="/dashboard?set={{.ID}}">View results</a></td>
       </tr>
       {{end}}
     </tbody>
   </table>
 </section>
+{{end}}
+
+{{define "scripts"}}
+<script src="{{asset "/static/js/survey_designer.js"}}"></script>
 {{end}}

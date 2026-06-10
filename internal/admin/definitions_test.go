@@ -83,9 +83,9 @@ func TestSurveyEditorPublishesNewSet(t *testing.T) {
 	srv, database := newServer(t)
 	admin := loginAdmin(t, srv)
 
-	// The editor renders the current set as JSON.
+	// The editor (visual designer) renders.
 	_, page := getBody(t, admin, srv.URL+"/survey")
-	if !strings.Contains(page, "Definition (JSON)") {
+	if !strings.Contains(page, "Publish as new set") {
 		t.Fatalf("survey editor missing: %s", first(page, 300))
 	}
 
