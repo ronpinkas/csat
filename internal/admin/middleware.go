@@ -27,6 +27,7 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /reset", rl(http.HandlerFunc(a.reset)))
 	// platform tenant provisioning (token-signed; multi-tenant only)
 	mux.Handle("POST /provision", rl(http.HandlerFunc(a.provision)))
+	mux.Handle("GET /handoff", rl(http.HandlerFunc(a.handoff)))
 
 	// session required
 	mux.Handle("GET /{$}", a.authed(a.home))
