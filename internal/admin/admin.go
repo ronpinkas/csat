@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ronpinkas/csat/internal/config"
+	"github.com/ronpinkas/csat/internal/defstore"
 	"github.com/ronpinkas/csat/internal/httpx"
 	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/tenant"
@@ -62,6 +63,11 @@ func New(provider tenant.Provider, tmpl *web.Templates, cfg *config.Config, def 
 		if err := a.bootstrap(db); err != nil {
 			return nil, err
 		}
+		// Seed the survey definition (and backfill existing responses) so an
+		// upgraded single-tenant deployment has an editable set immediately.
+		if _, err := defstore.Seed(db, a.def, time.Now().Unix()); err != nil {
+			return nil, err
+		}
 	}
 	go a.sweepLoop()
 	return a, nil
@@ -102,6 +108,7 @@ func (a *Admin) ensureTenant(db *sql.DB, ref string) {
 		return
 	}
 	_ = a.bootstrap(db)
+	_, _ = defstore.Seed(db, a.def, time.Now().Unix())
 	a.bootstrapped.Store(ref, true)
 }
 

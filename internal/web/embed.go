@@ -38,6 +38,7 @@ var pageTemplates = []string{
 	"dashboard.tmpl",
 	"users.tmpl",
 	"settings.tmpl",
+	"survey_edit.tmpl",
 }
 
 // LoadTemplates parses all page templates once. Call at startup. It registers

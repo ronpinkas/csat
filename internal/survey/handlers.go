@@ -9,11 +9,13 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/csrf"
+	"github.com/ronpinkas/csat/internal/defstore"
 	"github.com/ronpinkas/csat/internal/surveydef"
 	"github.com/ronpinkas/csat/internal/tenant"
 	"github.com/ronpinkas/csat/internal/token"
@@ -66,6 +68,7 @@ type surveyData struct {
 	pageBase
 	Token     string
 	CSRF      string
+	SetID     int64 // the question set this form was rendered with
 	Intro     string
 	Submit    string
 	Questions []qView
@@ -95,6 +98,11 @@ func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 		h.renderInvalid(w, lang)
 		return
 	}
+	def, setID, err := h.resolveFormDef(db, r)
+	if err != nil {
+		h.renderInvalid(w, lang)
+		return
+	}
 	if h.alreadyUsed(db, subject, subjectTime) {
 		t := stringsFor(lang)
 		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
@@ -105,10 +113,24 @@ func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 		pageBase:  h.base(lang),
 		Token:     r.URL.Query().Get("t"),
 		CSRF:      csrf.Issue(w, h.secure),
-		Intro:     h.def.IntroFor(lang),
+		SetID:     setID,
+		Intro:     def.IntroFor(lang),
 		Submit:    t.Submit,
-		Questions: h.questions(lang),
+		Questions: h.questions(def, lang),
 	})
+}
+
+// resolveFormDef picks the question set for a survey form: an explicit &set=<id>
+// when valid, otherwise the latest set (seeded on first touch).
+func (h *Handlers) resolveFormDef(db *sql.DB, r *http.Request) (*surveydef.Definition, int64, error) {
+	if s := r.URL.Query().Get("set"); s != "" {
+		if id, err := strconv.ParseInt(s, 10, 64); err == nil {
+			if d, derr := defstore.ByID(db, id); derr == nil {
+				return d, id, nil
+			}
+		}
+	}
+	return defstore.Resolve(db, h.def, time.Now().Unix())
 }
 
 // Submit handles POST /s — re-validate the token, validate input, store once.
@@ -132,13 +154,15 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusForbidden, lang, t.ErrGenericHeading, t.ErrSessionMsg)
 		return
 	}
-	answers, valid := parseAnswers(r.PostForm, h.def)
+	// Validate + tag against the exact set this form was rendered with.
+	def, setID := h.resolveSubmitDef(db, r)
+	answers, valid := parseAnswers(r.PostForm, def)
 	if !valid {
 		h.renderError(w, http.StatusBadRequest, lang, t.ErrFormHeading, t.ErrFormMsg)
 		return
 	}
 
-	switch h.store(db, subject, subjectTime, lang, answers) {
+	switch h.store(db, setID, subject, subjectTime, lang, answers) {
 	case storeOK:
 		h.renderDone(w, lang, t.DoneTitle, h.def.ThanksFor(lang))
 	case storeAlreadyUsed:
@@ -149,9 +173,9 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 }
 
 // questions builds the localized render models for the form.
-func (h *Handlers) questions(lang string) []qView {
-	out := make([]qView, 0, len(h.def.Questions))
-	for _, q := range h.def.Questions {
+func (h *Handlers) questions(def *surveydef.Definition, lang string) []qView {
+	out := make([]qView, 0, len(def.Questions))
+	for _, q := range def.Questions {
 		v := qView{
 			Key:         q.Key,
 			Type:        q.Type,
@@ -213,7 +237,21 @@ const (
 
 // store inserts the response, its answers, and the used-token marker in one
 // transaction. The used_tokens PRIMARY KEY enforces single submission.
-func (h *Handlers) store(db *sql.DB, subject string, subjectTime int64, lang string, answers []answer) storeResult {
+// resolveSubmitDef loads the set the form carried in its hidden "set" field
+// (the exact one rendered), falling back to the latest set.
+func (h *Handlers) resolveSubmitDef(db *sql.DB, r *http.Request) (*surveydef.Definition, int64) {
+	if s := r.PostFormValue("set"); s != "" {
+		if id, err := strconv.ParseInt(s, 10, 64); err == nil {
+			if d, derr := defstore.ByID(db, id); derr == nil {
+				return d, id
+			}
+		}
+	}
+	d, id, _ := defstore.Resolve(db, h.def, time.Now().Unix())
+	return d, id
+}
+
+func (h *Handlers) store(db *sql.DB, defID int64, subject string, subjectTime int64, lang string, answers []answer) storeResult {
 	now := time.Now().Unix()
 	tx, err := db.Begin()
 	if err != nil {
@@ -223,8 +261,8 @@ func (h *Handlers) store(db *sql.DB, subject string, subjectTime int64, lang str
 	defer tx.Rollback()
 
 	res, err := tx.Exec(
-		`INSERT INTO responses(subject, subject_time, lang, submitted_at) VALUES(?, ?, ?, ?)`,
-		subject, subjectTime, lang, now,
+		`INSERT INTO responses(subject, subject_time, lang, submitted_at, definition_id) VALUES(?, ?, ?, ?, ?)`,
+		subject, subjectTime, lang, now, defID,
 	)
 	if err != nil {
 		log.Printf("survey: insert response: %v", err)

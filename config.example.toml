@@ -53,9 +53,13 @@ theme_color = "#2563eb"
 # logo_path = ""   # optional: an explicit file path that overrides auto-detection
 
 [survey]
-# Path to a survey.json defining the questions (types, per-language labels,
-# options). Leave unset to use the built-in default (the CSAT instrument).
-# Copy survey.example.json and edit it to customize. System strings (buttons,
-# errors, "thank you") come from the en/es catalog; question wording lives in
-# the survey.json. The link's language token (en|es) selects both.
+# SEED ONLY. This survey.json is used once, on first run, to create the initial
+# question set in the database (and to seed each new tenant in multi-tenant
+# mode). After that the DATABASE is the source of truth: edit the survey in the
+# admin "Survey" tab, which publishes a new question set. Editing this file and
+# restarting has no effect once a set exists. A configured file that is later
+# removed is fine — the built-in default is used as the seed instead. Leave
+# unset to seed from the built-in default (the CSAT instrument). System strings
+# (buttons, errors, "thank you") come from the en/es catalog; question wording
+# lives in the set. The link's language token (en|es) selects both.
 # definition = "/etc/csat/survey.json"

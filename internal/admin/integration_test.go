@@ -189,8 +189,10 @@ func seedResponses(t *testing.T, database *sql.DB, n int) {
 func insertResponse(t *testing.T, database *sql.DB, subject string, csat int, resolution string, ces int, comment string) {
 	t.Helper()
 	now := time.Now().Unix()
+	// definition_id = 1: newServer seeds the first question set as id 1, and the
+	// analytics/export now scope responses to a set.
 	res, err := database.Exec(
-		`INSERT INTO responses(subject, subject_time, lang, submitted_at) VALUES(?, ?, 'en', ?)`,
+		`INSERT INTO responses(subject, subject_time, lang, submitted_at, definition_id) VALUES(?, ?, 'en', ?, 1)`,
 		subject, now, now)
 	if err != nil {
 		t.Fatalf("seed response: %v", err)

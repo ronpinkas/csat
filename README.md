@@ -155,10 +155,25 @@ Backward compatibility is by construction: a single-tenant deployment (like an e
 install) never sets the flag, never migrates, and is byte-for-byte unchanged. The two modes are
 mutually exclusive per deployment.
 
-## Survey definition (`survey.json`)
+## Survey definition (question sets)
 
-The questions are data, not code. Point `[survey] definition` at a `survey.json` (or use the
-built-in default). Each question has a `key`, a `type`, per-language `label`s, and `required`:
+The questions are data, not code, and they live in the **database** as versioned *question sets*,
+edited in the admin **Survey** tab — no filesystem access or restart needed. `[survey] definition`
+is only a **seed**: on first run its `survey.json` (or the built-in default) becomes set #1 and any
+pre-existing responses are backfilled to it. After that the database is the source of truth; once
+ported, the seed file is renamed to `survey.json.ported` (single-tenant, best-effort) and may be
+removed — a missing seed file is not an error.
+
+**Versioning.** Editing publishes a *new* set (id increases); older sets are never mutated, stay
+mintable, and keep their responses. Each response records the set it was answered under, so
+analytics are always coherent:
+
+- **Survey links** default to the latest set, or name one: `/s?t=<token>&set=<id>` (mint with
+  `--set`, or just append `&set=`).
+- **Dashboard** shows a *Question set* selector (default = latest); analytics and CSV are scoped to
+  the selected set.
+
+Each question has a `key`, a `type`, per-language `label`s, and `required`:
 
 | type | renders as | stored | dashboard |
 |---|---|---|---|

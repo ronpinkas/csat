@@ -11,7 +11,10 @@
   function rangeQuery() {
     var from = document.getElementById("from").value;
     var to = document.getElementById("to").value;
-    return "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&tz=" + encodeURIComponent(tz);
+    var q = "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&tz=" + encodeURIComponent(tz);
+    var setSel = document.getElementById("setSelect");
+    if (setSel && setSel.value) q += "&set=" + encodeURIComponent(setSel.value);
+    return q;
   }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
   function round2(x) { return Math.round(x * 100) / 100; }
@@ -111,5 +114,7 @@
 
   var apply = document.getElementById("apply");
   if (apply) apply.addEventListener("click", load);
+  var setSel = document.getElementById("setSelect");
+  if (setSel) setSel.addEventListener("change", load);
   load();
 })();

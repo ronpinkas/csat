@@ -35,6 +35,7 @@ func main() {
 	mintBase := flag.String("base", "", "base URL for -mint, e.g. https://csat.example.com")
 	mintLang := flag.String("lang", "en", "language for -mint (en|es)")
 	mintRef := flag.String("ref", "", "tenant ref for -mint (multi-tenant mode; empty = single-tenant)")
+	mintSet := flag.Int64("set", 0, "question set id for -mint (0 = latest set)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
@@ -64,7 +65,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("mint: %v", err)
 		}
-		fmt.Printf("%s/s?t=%s\n", *mintBase, tok)
+		link := fmt.Sprintf("%s/s?t=%s", *mintBase, tok)
+		if *mintSet > 0 {
+			link += fmt.Sprintf("&set=%d", *mintSet)
+		}
+		fmt.Println(link)
 		return
 	}
 	if generated {
@@ -90,11 +95,25 @@ func main() {
 		log.Fatalf("templates: %v", err)
 	}
 
-	def, err := surveydef.Load(cfg.Survey.Definition)
-	if err != nil {
-		log.Fatalf("survey definition: %v", err)
+	// The survey definition is only a SEED: on first run it is stored in the
+	// database (and existing responses backfilled to it); thereafter the DB is
+	// the source of truth and the survey is edited via the admin Survey tab. So a
+	// configured survey.json that has been removed (e.g. deleted after porting) is
+	// not fatal — we fall back to the built-in default as the seed. A file that
+	// exists but is invalid is still a hard error.
+	def := surveydef.Default()
+	if p := cfg.Survey.Definition; p != "" {
+		if _, statErr := os.Stat(p); statErr == nil {
+			loaded, err := surveydef.Load(p)
+			if err != nil {
+				log.Fatalf("survey definition: %v", err)
+			}
+			def = loaded
+		} else {
+			log.Printf("survey: %s not found — using the built-in default as the seed (edit surveys in the admin Survey tab)", p)
+		}
 	}
-	log.Printf("survey: %d question(s) loaded", len(def.Questions))
+	log.Printf("survey: %d question(s) in the seed definition", len(def.Questions))
 
 	secure := cfg.Server.TLS.Mode == "autocert"
 	static, err := web.StaticHandler()
@@ -108,6 +127,25 @@ func main() {
 	adminH, err := admin.New(provider, tmpl, cfg, def, secret, secure)
 	if err != nil {
 		log.Fatalf("admin: %v", err)
+	}
+
+	// The seed file's content now lives in the database (admin.New seeded it). In
+	// single-tenant mode, rename it to <path>.ported to make the switch explicit
+	// — surveys are edited in the admin Survey tab from here on. Best-effort: the
+	// config dir is read-only under the hardened systemd unit, so on failure we
+	// just tell the operator to remove it. (Multi-tenant keeps the file as the
+	// seed template for future tenants.)
+	if !cfg.Tenancy.Multi() {
+		if p := cfg.Survey.Definition; p != "" {
+			if _, statErr := os.Stat(p); statErr == nil {
+				ported := p + ".ported"
+				if rerr := os.Rename(p, ported); rerr == nil {
+					log.Printf("survey: ported %s into the database and renamed it to %s (edit surveys in the admin Survey tab)", p, ported)
+				} else {
+					log.Printf("survey: %s is seeded into the database and no longer used — you may remove it (auto-rename failed: %v)", p, rerr)
+				}
+			}
+		}
 	}
 
 	mux := http.NewServeMux()

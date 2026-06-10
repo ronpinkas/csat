@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"log"
@@ -9,26 +10,58 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ronpinkas/csat/internal/defstore"
 	"github.com/ronpinkas/csat/internal/surveydef"
 )
 
+// resolveSet picks the question set for an admin view: ?set=<id> when valid,
+// otherwise the latest set (seeded if absent). It also returns the full set list
+// for the dashboard selector.
+func (a *Admin) resolveSet(db *sql.DB, r *http.Request) (*surveydef.Definition, int64, []defstore.Version, error) {
+	versions, err := defstore.List(db)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	if s := r.URL.Query().Get("set"); s != "" {
+		if id, perr := strconv.ParseInt(s, 10, 64); perr == nil {
+			if d, derr := defstore.ByID(db, id); derr == nil {
+				return d, id, versions, nil
+			}
+		}
+	}
+	d, id, err := defstore.Resolve(db, a.def, time.Now().Unix())
+	return d, id, versions, err
+}
+
 type dashboardView struct {
 	base
-	From string
-	To   string
-	TZ   string
+	From  string
+	To    string
+	TZ    string
+	Sets  []defstore.Version
+	SetID int64
 }
 
 func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request) {
 	_, _, info, _ := a.parseRange(r)
+	_, setID, sets, _ := a.resolveSet(tenantDB(r.Context()), r)
 	b := a.newBase(r)
 	b.Wide = true
-	a.render(w, http.StatusOK, "dashboard.tmpl", dashboardView{base: b, From: info.From, To: info.To, TZ: info.TZ})
+	a.render(w, http.StatusOK, "dashboard.tmpl", dashboardView{
+		base: b, From: info.From, To: info.To, TZ: info.TZ, Sets: sets, SetID: setID,
+	})
 }
 
 func (a *Admin) analytics(w http.ResponseWriter, r *http.Request) {
 	from, to, info, loc := a.parseRange(r)
-	res, err := computeAnalytics(tenantDB(r.Context()), a.def, from, to, loc, info)
+	db := tenantDB(r.Context())
+	def, defID, _, err := a.resolveSet(db, r)
+	if err != nil {
+		log.Printf("admin: resolve set: %v", err)
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+	res, err := computeAnalytics(db, def, defID, from, to, loc, info)
 	if err != nil {
 		log.Printf("admin: analytics: %v", err)
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -46,6 +79,12 @@ type commentRow struct {
 
 func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 	from, to, _, _ := a.parseRange(r)
+	db := tenantDB(r.Context())
+	def, defID, _, err := a.resolveSet(db, r)
+	if err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 0 {
 		page = 0
@@ -54,7 +93,7 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 
 	labels := map[string]string{}
 	var keys []string
-	for _, q := range a.def.Questions {
+	for _, q := range def.Questions {
 		if q.Type == surveydef.TypeText {
 			keys = append(keys, q.Key)
 			labels[q.Key] = q.LabelFor("en")
@@ -67,16 +106,16 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
-	args := make([]any, 0, len(keys)+4)
+	args := make([]any, 0, len(keys)+5)
 	for _, k := range keys {
 		args = append(args, k)
 	}
-	args = append(args, from, to, limit, page*limit)
-	rows, err := tenantDB(r.Context()).Query(
+	args = append(args, from, to, defID, limit, page*limit)
+	rows, err := db.Query(
 		`SELECT r.submitted_at, r.lang, a.question_key, a.text
 		 FROM answers a JOIN responses r ON a.response_id = r.id
 		 WHERE a.question_key IN (`+ph+`) AND a.text IS NOT NULL AND a.text <> ''
-		   AND r.submitted_at >= ? AND r.submitted_at < ?
+		   AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?
 		 ORDER BY r.submitted_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -112,10 +151,16 @@ func (a *Admin) settings(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	from, to, info, _ := a.parseRange(r)
-	rows, err := tenantDB(r.Context()).Query(
+	db := tenantDB(r.Context())
+	def, defID, _, err := a.resolveSet(db, r)
+	if err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+	rows, err := db.Query(
 		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, a.question_key, a.num, a.text
 		 FROM responses r LEFT JOIN answers a ON a.response_id = r.id
-		 WHERE r.submitted_at >= ? AND r.submitted_at < ? ORDER BY r.id`, from, to)
+		 WHERE r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ? ORDER BY r.id`, from, to, defID)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
@@ -128,7 +173,7 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	defer cw.Flush()
 
 	header := []string{"id", "submitted_at_utc", "subject", "subject_time_utc", "lang"}
-	for _, q := range a.def.Questions {
+	for _, q := range def.Questions {
 		header = append(header, q.Key)
 	}
 	_ = cw.Write(header)
@@ -151,7 +196,7 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 			time.Unix(subjTime, 0).UTC().Format(time.RFC3339),
 			lang,
 		}
-		for _, q := range a.def.Questions {
+		for _, q := range def.Questions {
 			rec = append(rec, csvSafe(vals[q.Key]))
 		}
 		_ = cw.Write(rec)

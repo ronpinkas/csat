@@ -4,7 +4,7 @@
   <h1>{{.SiteName}}</h1>
   <nav class="admin-nav">
     <a href="/dashboard">Dashboard</a>
-    {{if eq .User.Role "admin"}}<a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
+    {{if eq .User.Role "admin"}}<a href="/survey">Survey</a><a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
     <a href="/export.csv" id="exportLink">Export CSV</a>
     <form method="POST" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -16,6 +16,13 @@
 <div class="toolbar" data-tz="{{.TZ}}">
   <label>From<input type="date" id="from" value="{{.From}}"></label>
   <label>To<input type="date" id="to" value="{{.To}}"></label>
+  {{if gt (len .Sets) 1}}
+  <label>Question set
+    <select id="setSelect">
+      {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>Set #{{.ID}}{{if .Latest}} (latest){{end}}</option>{{end}}
+    </select>
+  </label>
+  {{end}}
   <button class="btn ghost" id="apply" type="button">Apply</button>
   <span id="rangeNote"></span>
 </div>

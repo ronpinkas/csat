@@ -7,6 +7,7 @@
 
   <form method="POST" action="/s?t={{.Token}}">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="set" value="{{.SetID}}">
 
     {{range $q := .Questions}}
     <fieldset class="field">

@@ -38,6 +38,8 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 
 	// admin role required
 	mux.Handle("GET /settings", a.adminOnly(a.settings))
+	mux.Handle("GET /survey", a.adminOnly(a.surveyEditor))
+	mux.Handle("POST /survey", a.adminCSRF(a.surveyPublish))
 	mux.Handle("GET /users", a.adminOnly(a.usersPage))
 	mux.Handle("POST /users/invite", a.adminCSRF(a.createInvite))
 	mux.Handle("POST /users/deactivate", a.adminCSRF(a.deactivate))

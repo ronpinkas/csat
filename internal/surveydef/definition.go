@@ -87,6 +87,17 @@ func Load(path string) (*Definition, error) {
 	return d, nil
 }
 
+// Parse decodes and validates a survey definition from JSON bytes (used by the
+// admin editor and the DB-backed definition store).
+func Parse(data []byte) (*Definition, error) {
+	return parse(data)
+}
+
+// JSON returns the definition as indented JSON, for storage and the editor.
+func (d *Definition) JSON() ([]byte, error) {
+	return json.MarshalIndent(d, "", "  ")
+}
+
 func parse(data []byte) (*Definition, error) {
 	var d Definition
 	if err := json.Unmarshal(data, &d); err != nil {

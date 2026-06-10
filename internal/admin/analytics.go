@@ -63,12 +63,14 @@ type AnalyticsResult struct {
 	Trend     ResponsesTrend `json:"trend"`
 }
 
-// computeAnalytics builds the full dashboard payload for the date range.
-func computeAnalytics(db *sql.DB, def *surveydef.Definition, from, to int64, loc *time.Location, info RangeInfo) (AnalyticsResult, error) {
+// computeAnalytics builds the full dashboard payload for the date range, scoped
+// to a single question set (defID) so the question columns and the responses
+// counted always belong to the same survey version.
+func computeAnalytics(db *sql.DB, def *surveydef.Definition, defID, from, to int64, loc *time.Location, info RangeInfo) (AnalyticsResult, error) {
 	out := AnalyticsResult{Range: info}
 
 	if err := db.QueryRow(
-		`SELECT COUNT(*) FROM responses WHERE submitted_at >= ? AND submitted_at < ?`, from, to,
+		`SELECT COUNT(*) FROM responses WHERE submitted_at >= ? AND submitted_at < ? AND definition_id = ?`, from, to, defID,
 	).Scan(&out.Responses); err != nil {
 		return out, err
 	}
@@ -78,14 +80,14 @@ func computeAnalytics(db *sql.DB, def *surveydef.Definition, from, to int64, loc
 		var err error
 		switch q.Type {
 		case surveydef.TypeStars, surveydef.TypeScale, surveydef.TypeNPS:
-			err = fillNumeric(db, &s, q, from, to, loc)
+			err = fillNumeric(db, &s, q, defID, from, to, loc)
 		case surveydef.TypeChoice, surveydef.TypeMultiChoice:
-			err = fillBreakdown(db, &s, q, from, to)
+			err = fillBreakdown(db, &s, q, defID, from, to)
 		case surveydef.TypeText:
 			err = db.QueryRow(
 				`SELECT COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
-				 WHERE a.question_key = ? AND a.text IS NOT NULL AND a.text <> '' AND r.submitted_at >= ? AND r.submitted_at < ?`,
-				q.Key, from, to,
+				 WHERE a.question_key = ? AND a.text IS NOT NULL AND a.text <> '' AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`,
+				q.Key, from, to, defID,
 			).Scan(&s.Count)
 		}
 		if err != nil {
@@ -94,7 +96,7 @@ func computeAnalytics(db *sql.DB, def *surveydef.Definition, from, to int64, loc
 		out.Questions = append(out.Questions, s)
 	}
 
-	trend, err := responsesTrend(db, from, to, loc)
+	trend, err := responsesTrend(db, defID, from, to, loc)
 	if err != nil {
 		return out, err
 	}
@@ -102,12 +104,12 @@ func computeAnalytics(db *sql.DB, def *surveydef.Definition, from, to int64, loc
 	return out, nil
 }
 
-func fillNumeric(db *sql.DB, s *QStat, q surveydef.Question, from, to int64, loc *time.Location) error {
+func fillNumeric(db *sql.DB, s *QStat, q surveydef.Question, defID, from, to int64, loc *time.Location) error {
 	// distribution + count, then derive avg / top-box / nps in Go
 	rows, err := db.Query(
 		`SELECT a.num, COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
-		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?
-		 GROUP BY a.num`, q.Key, from, to)
+		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?
+		 GROUP BY a.num`, q.Key, from, to, defID)
 	if err != nil {
 		return err
 	}
@@ -158,7 +160,7 @@ func fillNumeric(db *sql.DB, s *QStat, q surveydef.Question, from, to int64, loc
 		}
 	}
 
-	trend, err := numericTrend(db, q.Key, from, to, loc)
+	trend, err := numericTrend(db, q.Key, defID, from, to, loc)
 	if err != nil {
 		return err
 	}
@@ -166,11 +168,11 @@ func fillNumeric(db *sql.DB, s *QStat, q surveydef.Question, from, to int64, loc
 	return nil
 }
 
-func fillBreakdown(db *sql.DB, s *QStat, q surveydef.Question, from, to int64) error {
+func fillBreakdown(db *sql.DB, s *QStat, q surveydef.Question, defID, from, to int64) error {
 	rows, err := db.Query(
 		`SELECT a.text, COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
-		 WHERE a.question_key = ? AND a.text IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?
-		 GROUP BY a.text`, q.Key, from, to)
+		 WHERE a.question_key = ? AND a.text IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?
+		 GROUP BY a.text`, q.Key, from, to, defID)
 	if err != nil {
 		return err
 	}
@@ -206,11 +208,11 @@ type dayAvg struct {
 	sum int
 }
 
-func numericTrend(db *sql.DB, key string, from, to int64, loc *time.Location) (*NumTrend, error) {
+func numericTrend(db *sql.DB, key string, defID, from, to int64, loc *time.Location) (*NumTrend, error) {
 	rows, err := db.Query(
 		`SELECT r.submitted_at, a.num FROM answers a JOIN responses r ON a.response_id = r.id
-		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ?`,
-		key, from, to)
+		 WHERE a.question_key = ? AND a.num IS NOT NULL AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`,
+		key, from, to, defID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,9 +248,9 @@ func numericTrend(db *sql.DB, key string, from, to int64, loc *time.Location) (*
 	return t, nil
 }
 
-func responsesTrend(db *sql.DB, from, to int64, loc *time.Location) (ResponsesTrend, error) {
+func responsesTrend(db *sql.DB, defID, from, to int64, loc *time.Location) (ResponsesTrend, error) {
 	rows, err := db.Query(
-		`SELECT submitted_at FROM responses WHERE submitted_at >= ? AND submitted_at < ?`, from, to)
+		`SELECT submitted_at FROM responses WHERE submitted_at >= ? AND submitted_at < ? AND definition_id = ?`, from, to, defID)
 	if err != nil {
 		return ResponsesTrend{}, err
 	}
