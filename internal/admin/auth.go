@@ -131,7 +131,9 @@ func (a *Admin) changePassword(w http.ResponseWriter, r *http.Request) {
 	next := r.PostFormValue("new")
 	confirm := r.PostFormValue("confirm")
 
-	if !verifyPassword(u.PasswordHash, current) {
+	// A forced first-login change does not ask for the current password (the user
+	// just authenticated with it). A voluntary change still requires it.
+	if !u.MustChangePW && !verifyPassword(u.PasswordHash, current) {
 		renderErr("Your current password is incorrect.")
 		return
 	}

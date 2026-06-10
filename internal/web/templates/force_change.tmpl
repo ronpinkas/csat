@@ -6,10 +6,12 @@
   {{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
   <form method="POST" action="/account/password">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if not .Forced}}
     <div class="form-row">
       <label for="current">Current password</label>
       <input id="current" type="password" name="current" autocomplete="current-password" required>
     </div>
+    {{end}}
     <div class="form-row">
       <label for="new">New password</label>
       <input id="new" type="password" name="new" autocomplete="new-password" minlength="12" required>
