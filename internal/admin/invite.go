@@ -15,6 +15,11 @@ type Invite struct {
 	ID       int64
 	Role     string
 	Username sql.NullString
+	// Platform is true for a platform-minted invite (created_by IS NULL). Such
+	// invites may override an existing account on redemption (the provisioning
+	// break-glass: an admin who lost their password redeems with the same
+	// username to reclaim that account).
+	Platform bool
 }
 
 func createInviteRow(db *sql.DB, role, username string, createdBy int64, ttl time.Duration) (rawToken string, err error) {
@@ -42,18 +47,22 @@ func createInviteRow(db *sql.DB, role, username string, createdBy int64, ttl tim
 }
 
 func inviteByToken(db *sql.DB, rawToken string) (*Invite, error) {
-	var inv Invite
+	var (
+		inv     Invite
+		creator sql.NullInt64
+	)
 	err := db.QueryRow(
-		`SELECT id, role, username FROM invites
+		`SELECT id, role, username, created_by FROM invites
 		 WHERE token_hash = ? AND redeemed_at IS NULL AND expires_at > ?`,
 		hashToken(rawToken), time.Now().Unix(),
-	).Scan(&inv.ID, &inv.Role, &inv.Username)
+	).Scan(&inv.ID, &inv.Role, &inv.Username, &creator)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errNotFound
 		}
 		return nil, err
 	}
+	inv.Platform = !creator.Valid // created_by IS NULL => platform-minted
 	return &inv, nil
 }
 
@@ -67,18 +76,37 @@ func redeemInvite(db *sql.DB, inv *Invite, username, passwordHash string) error 
 	}
 	defer tx.Rollback()
 
+	var newID int64
 	res, err := tx.Exec(
 		`INSERT INTO users(username, password_hash, role, must_change_pw, active, created_at)
 		 VALUES(?, ?, ?, 0, 1, ?)`,
 		username, passwordHash, inv.Role, time.Now().Unix(),
 	)
-	if err != nil {
-		if isUnique(err) {
-			return errUsernameTaken
-		}
+	switch {
+	case err == nil:
+		newID, _ = res.LastInsertId()
+	case !isUnique(err):
 		return err
+	case !inv.Platform:
+		// A normal (admin-issued) invite never overrides an existing account.
+		return errUsernameTaken
+	default:
+		// Platform break-glass: the entered username already exists — reclaim
+		// that account with the invite's role and the new password, reactivate
+		// it, and revoke its sessions (the invite acts as a password reset).
+		if _, uerr := tx.Exec(
+			`UPDATE users SET password_hash = ?, role = ?, must_change_pw = 0, active = 1, reset_requested_at = NULL
+			 WHERE username = ?`, passwordHash, inv.Role, username,
+		); uerr != nil {
+			return uerr
+		}
+		if uerr := tx.QueryRow(`SELECT id FROM users WHERE username = ?`, username).Scan(&newID); uerr != nil {
+			return uerr
+		}
+		if _, uerr := tx.Exec(`DELETE FROM sessions WHERE user_id = ?`, newID); uerr != nil {
+			return uerr
+		}
 	}
-	newID, _ := res.LastInsertId()
 
 	r, err := tx.Exec(
 		`UPDATE invites SET redeemed_at = ?, redeemed_user_id = ? WHERE id = ? AND redeemed_at IS NULL`,

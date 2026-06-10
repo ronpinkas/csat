@@ -147,22 +147,27 @@ How the tenant travels with each request:
 | Survey link | Encoded **inside the token** (tamper-proof). Mint with `-ref`: `csat … -mint -subject … -ref acme.com` |
 | Admin sign-in | `?ref=acme.com` on the `/login` link; the session cookie then pins the tenant for all later requests |
 
-**Onboarding a tenant — `POST /provision`.** The platform (which shares the deployment's crypto
-secret) mints a short-lived, signed provisioning token and POSTs it; CSAT creates the tenant,
-seeds its question set + branding, and returns an **admin invite link** as JSON. No shared
-password, no super-admin console — the shared secret *is* the authorization:
+**Onboarding (and recovery) — `POST /provision`.** The platform (which shares the deployment's
+crypto secret) mints a short-lived, signed provisioning token and POSTs it; CSAT creates/ensures
+the tenant, seeds its question set + branding, and returns an **admin invite link** as JSON. No
+shared password, no super-admin console — the shared secret *is* the authorization:
 
 ```
-POST https://csat.example.com/provision?t=<token>
-  -> { "ref": "acme.com",
-       "invite_url": "https://csat.example.com/invite?t=…&ref=acme.com" }
+POST /provision?t=<token>
+  -> { "ref":"acme.com", "invite_url":".../invite?t=…&ref=acme.com" }
 ```
 
-The token is built exactly like a survey token, with subject `__provision__`, the tenant in `ref`,
-and `subjectTime` as the not-after expiry. Build it with `csat -mint-tenant -ref acme.com -base …`,
-or with the `provisionUrl` / `provision_url` helpers in [`integrations/`](integrations/). Hand the
-returned `invite_url` to the customer; they set their own username + password and become the
-tenant's first admin. (Onboarding needs no DNS, no certificate, no restart.)
+The call is **repeatable**, which doubles as forgot-password recovery: the customer opens the
+invite and enters their email + a password. A new email creates the admin; an **email that already
+exists reclaims that account** (the invite acts as a password reset). So a sole admin who lost
+their password is recovered by simply re-provisioning — no other admin needed. (This reclaim
+behavior is limited to platform-minted invites; a normal admin-issued invite never overrides an
+existing account.)
+
+The token is built like a survey token (subject `__provision__`, tenant in `ref`, `subjectTime` =
+the not-after expiry): use `csat -mint-tenant -ref acme.com -base …`, or the `provisionUrl` /
+`provision_url` helpers in [`integrations/`](integrations/). Hand the returned `invite_url` to the
+customer. (Onboarding needs no DNS, no certificate, no restart.)
 
 > Legacy fallback: when no platform integration is used, a tenant's admin is still seeded on first
 > `/login?ref=` from `admin.username` / `CSAT_ADMIN_INITIAL_PW` — fine for testing, but prefer

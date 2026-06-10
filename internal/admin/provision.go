@@ -9,8 +9,9 @@ import (
 )
 
 // ProvisionSubject is the reserved token subject that marks a tenant-provisioning
-// token (as opposed to a survey token). The token's subjectTime field carries
-// the not-after expiry, and the ref field the tenant to create.
+// token (vs. a survey token). subjectTime carries the not-after expiry and ref
+// the tenant to create. (Restricting which tenant user this is for is a platform
+// policy; csat just returns an unconditional admin invite.)
 const ProvisionSubject = "__provision__"
 
 // provision creates (or ensures) a tenant from a platform-signed token and
@@ -44,11 +45,17 @@ func (a *Admin) provision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Seed the tenant's question set (branding seeds lazily). Deliberately do NOT
-	// auto-seed an admin user — the returned invite creates the first admin.
+	// auto-seed an admin user — the returned invite creates (or reclaims) one.
 	if _, err := defstore.Seed(db, a.def, time.Now().Unix()); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
+
+	// Mint a fresh, unconditional admin invite — repeatable even when the tenant
+	// already has admins. The redeemer enters their email/username + a password:
+	// a new username creates the admin; an existing one reclaims that account
+	// (acts as a password reset). This is the platform's break-glass for an admin
+	// who lost their password with no other admin to issue a reset.
 	raw, err := createInviteRow(db, RoleAdmin, "", 0, a.inviteTTL)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
