@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ronpinkas/csat/internal/brandstore"
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/csrf"
 	"github.com/ronpinkas/csat/internal/defstore"
@@ -42,6 +43,7 @@ type pageBase struct {
 	Wide     bool
 	Lang     string
 	LogoURL  string
+	Ref      string // tenant ref, so the layout's theme.css link is tenant-scoped
 }
 
 // qView is one question prepared for rendering.
@@ -90,27 +92,27 @@ type errData struct {
 func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 	subject, subjectTime, lang, ref, ok := h.decode(r)
 	if !ok {
-		h.renderInvalid(w, "en")
+		h.renderInvalid(w, nil, "", "en")
 		return
 	}
 	db, err := h.provider.DB(ref)
 	if err != nil {
-		h.renderInvalid(w, lang)
+		h.renderInvalid(w, nil, "", lang)
 		return
 	}
 	def, setID, err := h.resolveFormDef(db, r)
 	if err != nil {
-		h.renderInvalid(w, lang)
+		h.renderInvalid(w, db, ref, lang)
 		return
 	}
 	if h.alreadyUsed(db, subject, subjectTime) {
 		t := stringsFor(lang)
-		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
+		h.renderDone(w, db, ref, lang, t.DoneTitle, t.AlreadyMsg)
 		return
 	}
 	t := stringsFor(lang)
 	h.render(w, "survey.tmpl", surveyData{
-		pageBase:  h.base(lang),
+		pageBase:  h.base(lang, ref, db),
 		Token:     r.URL.Query().Get("t"),
 		CSRF:      csrf.Issue(w, h.secure),
 		SetID:     setID,
@@ -136,39 +138,39 @@ func (h *Handlers) resolveFormDef(db *sql.DB, r *http.Request) (*surveydef.Defin
 // Submit handles POST /s — re-validate the token, validate input, store once.
 func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderInvalid(w, "en")
+		h.renderInvalid(w, nil, "", "en")
 		return
 	}
 	subject, subjectTime, lang, ref, ok := h.decode(r)
 	if !ok {
-		h.renderInvalid(w, "en")
+		h.renderInvalid(w, nil, "", "en")
 		return
 	}
 	db, err := h.provider.DB(ref)
 	if err != nil {
-		h.renderInvalid(w, lang)
+		h.renderInvalid(w, nil, "", lang)
 		return
 	}
 	t := stringsFor(lang)
 	if !csrf.Check(r) {
-		h.renderError(w, http.StatusForbidden, lang, t.ErrGenericHeading, t.ErrSessionMsg)
+		h.renderError(w, db, ref, http.StatusForbidden, lang, t.ErrGenericHeading, t.ErrSessionMsg)
 		return
 	}
 	// Validate + tag against the exact set this form was rendered with.
 	def, setID := h.resolveSubmitDef(db, r)
 	answers, valid := parseAnswers(r.PostForm, def)
 	if !valid {
-		h.renderError(w, http.StatusBadRequest, lang, t.ErrFormHeading, t.ErrFormMsg)
+		h.renderError(w, db, ref, http.StatusBadRequest, lang, t.ErrFormHeading, t.ErrFormMsg)
 		return
 	}
 
 	switch h.store(db, setID, subject, subjectTime, lang, answers) {
 	case storeOK:
-		h.renderDone(w, lang, t.DoneTitle, h.def.ThanksFor(lang))
+		h.renderDone(w, db, ref, lang, t.DoneTitle, def.ThanksFor(lang))
 	case storeAlreadyUsed:
-		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
+		h.renderDone(w, db, ref, lang, t.DoneTitle, t.AlreadyMsg)
 	default:
-		h.renderError(w, http.StatusInternalServerError, lang, t.ErrGenericHeading, t.ErrSaveMsg)
+		h.renderError(w, db, ref, http.StatusInternalServerError, lang, t.ErrGenericHeading, t.ErrSaveMsg)
 	}
 }
 
@@ -321,9 +323,20 @@ func isUniqueViolation(err error) bool {
 
 var hexColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
 
-// Logo serves the resolved logo file (or 404 when none is available), resolved
-// per request so dropping/replacing a logo takes effect without a restart.
+// Logo serves the tenant's uploaded logo (from ?ref) when set, otherwise the
+// deployment logo file (or 404 when none is available).
 func (h *Handlers) Logo(w http.ResponseWriter, r *http.Request) {
+	if db, err := h.provider.DB(r.URL.Query().Get("ref")); err == nil {
+		if blob, ctype, ok := brandstore.Logo(db); ok {
+			if ctype == "" {
+				ctype = http.DetectContentType(blob)
+			}
+			w.Header().Set("Content-Type", ctype)
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_, _ = w.Write(blob)
+			return
+		}
+	}
 	path := h.cfg.Branding.ResolveLogo()
 	if path == "" {
 		http.NotFound(w, r)
@@ -334,9 +347,13 @@ func (h *Handlers) Logo(w http.ResponseWriter, r *http.Request) {
 }
 
 // ThemeCSS serves a tiny stylesheet setting the brand color as a CSS variable
-// (a same-origin stylesheet, so the strict no-inline-styles CSP holds).
+// (a same-origin stylesheet, so the strict no-inline-styles CSP holds). The
+// tenant is taken from ?ref so the public survey page gets the tenant's color.
 func (h *Handlers) ThemeCSS(w http.ResponseWriter, r *http.Request) {
 	color := h.cfg.Branding.ThemeColor
+	if db, err := h.provider.DB(r.URL.Query().Get("ref")); err == nil {
+		color = brandstore.Resolve(db, h.cfg.Site.Name, h.cfg.Branding.ThemeColor).ThemeColor
+	}
 	if !hexColorRE.MatchString(color) {
 		color = "#2563eb"
 	}
@@ -347,11 +364,16 @@ func (h *Handlers) ThemeCSS(w http.ResponseWriter, r *http.Request) {
 
 // ---- rendering ----
 
-func (h *Handlers) base(lang string) pageBase {
+func (h *Handlers) base(lang, ref string, db *sql.DB) pageBase {
+	name := h.cfg.Site.Name
+	if db != nil {
+		name = brandstore.Resolve(db, h.cfg.Site.Name, h.cfg.Branding.ThemeColor).SiteName
+	}
 	return pageBase{
-		SiteName: h.cfg.Site.Name,
+		SiteName: name,
 		Lang:     normalizeLang(lang),
-		LogoURL:  h.cfg.Branding.LogoURL(),
+		LogoURL:  brandstore.LogoURL(db, ref, h.cfg.Branding.LogoURL()),
+		Ref:      ref,
 	}
 }
 
@@ -371,17 +393,17 @@ func (h *Handlers) render(w http.ResponseWriter, name string, data any) {
 	h.write(w, http.StatusOK, name, data)
 }
 
-func (h *Handlers) renderDone(w http.ResponseWriter, lang, title, msg string) {
-	h.write(w, http.StatusOK, "survey_done.tmpl", doneData{h.base(lang), title, msg})
+func (h *Handlers) renderDone(w http.ResponseWriter, db *sql.DB, ref, lang, title, msg string) {
+	h.write(w, http.StatusOK, "survey_done.tmpl", doneData{h.base(lang, ref, db), title, msg})
 }
 
-func (h *Handlers) renderError(w http.ResponseWriter, status int, lang, heading, msg string) {
-	h.write(w, status, "survey_error.tmpl", errData{h.base(lang), heading, msg})
+func (h *Handlers) renderError(w http.ResponseWriter, db *sql.DB, ref string, status int, lang, heading, msg string) {
+	h.write(w, status, "survey_error.tmpl", errData{h.base(lang, ref, db), heading, msg})
 }
 
-func (h *Handlers) renderInvalid(w http.ResponseWriter, lang string) {
+func (h *Handlers) renderInvalid(w http.ResponseWriter, db *sql.DB, ref, lang string) {
 	t := stringsFor(lang)
-	h.renderError(w, http.StatusBadRequest, lang, t.ErrInvalidHeading, t.ErrInvalidMsg)
+	h.renderError(w, db, ref, http.StatusBadRequest, lang, t.ErrInvalidHeading, t.ErrInvalidMsg)
 }
 
 // descend returns hi, hi-1, ... 1 (for the reverse-DOM star widget).

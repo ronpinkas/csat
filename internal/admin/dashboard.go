@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ronpinkas/csat/internal/brandstore"
 	"github.com/ronpinkas/csat/internal/defstore"
 	"github.com/ronpinkas/csat/internal/surveydef"
 )
@@ -137,16 +140,73 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 
 type settingsView struct {
 	base
-	Secret  string
-	KeyPath string
+	Secret     string
+	KeyPath    string
+	SiteName   string
+	ThemeColor string
+	HasLogo    bool
+	Error      string
+	Saved      bool
 }
 
+var hexColorRE = regexp.MustCompile(`^#[0-9a-fA-F]{3,8}$`)
+
 func (a *Admin) settings(w http.ResponseWriter, r *http.Request) {
+	a.renderSettings(w, r, "", false)
+}
+
+func (a *Admin) renderSettings(w http.ResponseWriter, r *http.Request, errMsg string, saved bool) {
+	db := tenantDB(r.Context())
+	b := brandstore.Resolve(db, a.cfg.Site.Name, a.cfg.Branding.ThemeColor)
+	_, hasLogo := brandstore.LogoVersion(db)
 	a.render(w, http.StatusOK, "settings.tmpl", settingsView{
-		base:    a.newBase(r),
-		Secret:  a.secret,
-		KeyPath: a.cfg.Security.CryptoKeyPath,
+		base:       a.newBase(r),
+		Secret:     a.secret,
+		KeyPath:    a.cfg.Security.CryptoKeyPath,
+		SiteName:   b.SiteName,
+		ThemeColor: b.ThemeColor,
+		HasLogo:    hasLogo,
+		Error:      errMsg,
+		Saved:      saved,
 	})
+}
+
+// saveSettings updates the tenant's branding (name, theme color, optional logo
+// upload). Multipart form.
+func (a *Admin) saveSettings(w http.ResponseWriter, r *http.Request) {
+	db := tenantDB(r.Context())
+	_ = r.ParseMultipartForm(2 << 20) // 2 MiB
+	name := strings.TrimSpace(r.PostFormValue("site_name"))
+	color := strings.TrimSpace(r.PostFormValue("theme_color"))
+	if color != "" && !hexColorRE.MatchString(color) {
+		a.renderSettings(w, r, "Theme color must be a hex value like #2563eb.", false)
+		return
+	}
+	now := time.Now().Unix()
+	if err := brandstore.Save(db, name, color, now); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if f, hdr, err := r.FormFile("logo"); err == nil {
+		defer f.Close()
+		blob, rerr := io.ReadAll(io.LimitReader(f, 1<<20)) // 1 MiB cap
+		if rerr != nil {
+			a.renderSettings(w, r, "Could not read the uploaded logo.", false)
+			return
+		}
+		if len(blob) > 0 {
+			ctype := hdr.Header.Get("Content-Type")
+			if !strings.HasPrefix(ctype, "image/") {
+				a.renderSettings(w, r, "The logo must be an image file (PNG, SVG, JPG, …).", false)
+				return
+			}
+			if err := brandstore.SaveLogo(db, blob, ctype, now); err != nil {
+				http.Error(w, "internal error", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+	a.renderSettings(w, r, "", true)
 }
 
 func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {

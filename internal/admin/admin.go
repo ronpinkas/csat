@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ronpinkas/csat/internal/brandstore"
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/defstore"
 	"github.com/ronpinkas/csat/internal/httpx"
@@ -174,15 +175,33 @@ type base struct {
 	Ref string
 }
 
+// siteName resolves the tenant's branded name (falling back to the deployment
+// default) for the given tenant database.
+func (a *Admin) siteName(db *sql.DB) string {
+	return brandstore.Resolve(db, a.cfg.Site.Name, a.cfg.Branding.ThemeColor).SiteName
+}
+
 // publicBase is for pre-session pages (login, invite redeem) that have no user.
 // ref is carried into the page's forms/links so the tenant survives the next
-// request (empty in single-tenant mode).
+// request (empty in single-tenant mode); the branded name is resolved from the
+// tenant's database.
 func (a *Admin) publicBase(ref string) base {
-	return base{SiteName: a.cfg.Site.Name, Lang: "en", LogoURL: a.cfg.Branding.LogoURL(), Ref: ref}
+	name := a.cfg.Site.Name
+	logo := a.cfg.Branding.LogoURL()
+	if db, err := a.provider.DB(ref); err == nil {
+		name = a.siteName(db)
+		logo = brandstore.LogoURL(db, ref, a.cfg.Branding.LogoURL())
+	}
+	return base{SiteName: name, Lang: "en", LogoURL: logo, Ref: ref}
 }
 
 func (a *Admin) newBase(r *http.Request) base {
-	b := base{SiteName: a.cfg.Site.Name, Lang: "en", LogoURL: a.cfg.Branding.LogoURL(), Ref: refFrom(r.Context())}
+	db := tenantDB(r.Context())
+	ref := refFrom(r.Context())
+	b := base{
+		SiteName: a.siteName(db), Lang: "en",
+		LogoURL: brandstore.LogoURL(db, ref, a.cfg.Branding.LogoURL()), Ref: ref,
+	}
 	if u := userFrom(r.Context()); u != nil {
 		b.User = u
 	}

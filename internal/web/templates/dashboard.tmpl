@@ -1,6 +1,7 @@
 {{define "title"}}{{.SiteName}} — Dashboard{{end}}
 {{define "content"}}
 <header class="admin-head">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
   <h1>{{.SiteName}}</h1>
   <nav class="admin-nav">
     <a href="/dashboard">Dashboard</a>

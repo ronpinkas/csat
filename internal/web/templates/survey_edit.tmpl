@@ -1,6 +1,7 @@
 {{define "title"}}{{.SiteName}} — Survey{{end}}
 {{define "content"}}
 <header class="admin-head">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
   <h1>Survey</h1>
   <nav class="admin-nav">
     <a href="/dashboard">Dashboard</a><a href="/users">Users</a><a href="/settings">Settings</a>

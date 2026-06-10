@@ -1,16 +1,43 @@
 {{define "title"}}{{.SiteName}} — Settings{{end}}
 {{define "content"}}
 <header class="admin-head">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
   <h1>Settings</h1>
   <nav class="admin-nav">
-    <a href="/dashboard">Dashboard</a><a href="/users">Users</a>
+    <a href="/dashboard">Dashboard</a><a href="/survey">Survey</a><a href="/users">Users</a>
     <form method="POST" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost">Sign out</button>
     </form>
   </nav>
 </header>
 
+{{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
+{{if .Saved}}<div class="notice ok">Branding saved.</div>{{end}}
+
 <section class="card">
+  <h3>Branding</h3>
+  <p class="lede">Customize how this account looks to your survey respondents and admins — the name,
+  accent color, and logo. Blank fields fall back to the platform defaults.</p>
+  <form method="POST" action="/settings" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <div class="form-row">
+      <label for="site_name">Site name</label>
+      <input id="site_name" name="site_name" value="{{.SiteName}}" placeholder="e.g. Acme Support">
+    </div>
+    <div class="form-row">
+      <label for="theme_color">Accent color (hex)</label>
+      <input id="theme_color" name="theme_color" value="{{.ThemeColor}}" placeholder="#2563eb">
+    </div>
+    <div class="form-row">
+      <label for="logo">Logo{{if .HasLogo}} — a logo is set; choose a file to replace it{{end}}</label>
+      <input id="logo" name="logo" type="file" accept="image/*">
+      {{if .HasLogo}}<p class="muted"><img class="logo" src="{{.LogoURL}}" alt="current logo"></p>{{end}}
+    </div>
+    <button class="btn primary" type="submit">Save branding</button>
+  </form>
+</section>
+
+<section class="card" style="margin-top:16px">
   <h3>Survey-link secret</h3>
   <p class="lede">Share this exact value with your call platform's link-builder so the survey links
   it generates will validate here. Treat it like a password — anyone with it can forge links.</p>
