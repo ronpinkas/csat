@@ -24,10 +24,16 @@ func createInviteRow(db *sql.DB, role, username string, createdBy int64, ttl tim
 	if username != "" {
 		uname = username
 	}
+	// createdBy == 0 means "no tenant creator" (a platform-minted admin invite
+	// for a brand-new tenant) — store NULL.
+	var creator any
+	if createdBy != 0 {
+		creator = createdBy
+	}
 	_, err = db.Exec(
 		`INSERT INTO invites(token_hash, role, username, created_by, created_at, expires_at)
 		 VALUES(?, ?, ?, ?, ?, ?)`,
-		hashToken(rawToken), role, uname, createdBy, now.Unix(), now.Add(ttl).Unix(),
+		hashToken(rawToken), role, uname, creator, now.Unix(), now.Add(ttl).Unix(),
 	)
 	if err != nil {
 		return "", err

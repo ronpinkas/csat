@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/ronpinkas/csat/internal/admin"
 	"github.com/ronpinkas/csat/internal/config"
@@ -36,6 +37,8 @@ func main() {
 	mintLang := flag.String("lang", "en", "language for -mint (en|es)")
 	mintRef := flag.String("ref", "", "tenant ref for -mint (multi-tenant mode; empty = single-tenant)")
 	mintSet := flag.Int64("set", 0, "question set id for -mint (0 = latest set)")
+	mintTenant := flag.Bool("mint-tenant", false, "mint a tenant-provisioning URL for -ref (platform use) and exit")
+	mintTTL := flag.Int64("ttl", 86400, "provisioning token TTL in seconds (-mint-tenant)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
@@ -70,6 +73,20 @@ func main() {
 			link += fmt.Sprintf("&set=%d", *mintSet)
 		}
 		fmt.Println(link)
+		return
+	}
+
+	if *mintTenant {
+		if *mintRef == "" {
+			log.Fatal("mint-tenant: -ref is required")
+		}
+		expiry := time.Now().Unix() + *mintTTL
+		tok, err := token.Encrypt(secret, admin.ProvisionSubject, expiry, "", *mintRef)
+		if err != nil {
+			log.Fatalf("mint-tenant: %v", err)
+		}
+		// POST this URL to provision the tenant; the JSON reply has invite_url.
+		fmt.Printf("%s/provision?t=%s\n", *mintBase, tok)
 		return
 	}
 	if generated {

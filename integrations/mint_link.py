@@ -14,6 +14,7 @@ Requires: pip install cryptography
 import base64
 import hashlib
 import secrets
+import time
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
@@ -40,6 +41,18 @@ def mint_link(base_url: str, crypto_secret: str, subject: str, subject_time: int
     """Return the full survey URL to text to the customer."""
     token = mint_token(crypto_secret, subject, subject_time, lang, ref)
     return f"{base_url.rstrip('/')}/s?t={token}"
+
+
+def provision_url(base_url: str, crypto_secret: str, ref: str, ttl_seconds: int = 86400) -> str:
+    """Return the tenant-provisioning URL (multi-tenant / platform-hosted CSAT).
+
+    POST this URL to the CSAT server; the JSON reply contains `invite_url`, the
+    admin invite link to hand to the new tenant. Signed with the shared secret,
+    so only the platform can call it.
+    """
+    expiry = int(time.time()) + ttl_seconds
+    token = mint_token(crypto_secret, "__provision__", expiry, "en", ref)
+    return f"{base_url.rstrip('/')}/provision?t={token}"
 
 
 if __name__ == "__main__":

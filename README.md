@@ -147,9 +147,26 @@ How the tenant travels with each request:
 | Survey link | Encoded **inside the token** (tamper-proof). Mint with `-ref`: `csat … -mint -subject … -ref acme.com` |
 | Admin sign-in | `?ref=acme.com` on the `/login` link; the session cookie then pins the tenant for all later requests |
 
-Onboarding a customer needs **no DNS, no certificate, no restart** — the platform simply starts
-minting links (and an admin sign-in link) with the new `ref`; the tenant database is created on
-first touch and its admin is seeded automatically (`admin.username` / `CSAT_ADMIN_INITIAL_PW`).
+**Onboarding a tenant — `POST /provision`.** The platform (which shares the deployment's crypto
+secret) mints a short-lived, signed provisioning token and POSTs it; CSAT creates the tenant,
+seeds its question set + branding, and returns an **admin invite link** as JSON. No shared
+password, no super-admin console — the shared secret *is* the authorization:
+
+```
+POST https://csat.example.com/provision?t=<token>
+  -> { "ref": "acme.com",
+       "invite_url": "https://csat.example.com/invite?t=…&ref=acme.com" }
+```
+
+The token is built exactly like a survey token, with subject `__provision__`, the tenant in `ref`,
+and `subjectTime` as the not-after expiry. Build it with `csat -mint-tenant -ref acme.com -base …`,
+or with the `provisionUrl` / `provision_url` helpers in [`integrations/`](integrations/). Hand the
+returned `invite_url` to the customer; they set their own username + password and become the
+tenant's first admin. (Onboarding needs no DNS, no certificate, no restart.)
+
+> Legacy fallback: when no platform integration is used, a tenant's admin is still seeded on first
+> `/login?ref=` from `admin.username` / `CSAT_ADMIN_INITIAL_PW` — fine for testing, but prefer
+> `/provision` in production so each tenant's first admin sets its own password.
 
 Backward compatibility is by construction: a single-tenant deployment (like an existing on-prem
 install) never sets the flag, never migrates, and is byte-for-byte unchanged. The two modes are

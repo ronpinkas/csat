@@ -40,7 +40,19 @@ function mintLink(baseUrl, cryptoSecret, subject, subjectTime, lang = "en", ref 
   return `${baseUrl.replace(/\/+$/, "")}/s?t=${token}`;
 }
 
-module.exports = { mintToken, mintLink };
+/**
+ * Build the tenant-provisioning URL (multi-tenant / platform-hosted CSAT).
+ * POST this URL to the CSAT server; the JSON reply contains `invite_url`, the
+ * admin invite link to hand to the new tenant. Signed with the shared secret,
+ * so only the platform can call it.
+ */
+function provisionUrl(baseUrl, cryptoSecret, ref, ttlSeconds = 86400) {
+  const expiry = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const token = mintToken(cryptoSecret, "__provision__", expiry, "en", ref);
+  return `${baseUrl.replace(/\/+$/, "")}/provision?t=${token}`;
+}
+
+module.exports = { mintToken, mintLink, provisionUrl };
 
 // CLI: node mint_link.js --subject +15551234567 [--ts 1717286400] [--lang es] [--base URL]
 //      (secret from --secret or CSAT_CRYPTO_SECRET)

@@ -41,3 +41,22 @@ node    mint_link.js  --subject +15551234567 --lang es --base https://csat.examp
 # multi-tenant: bind the link to a tenant
 python3 mint_link.py --subject +15551234567 --lang es --ref acme.com --base https://csat.example.com
 ```
+
+## Provisioning a tenant (multi-tenant / platform-hosted)
+
+`provisionUrl` / `provision_url` build a signed URL you **POST** to the CSAT server to create a
+tenant; the JSON reply contains `invite_url`, the admin invite link to hand to the new tenant.
+
+```js
+const { provisionUrl } = require("./mint_link");
+const url = provisionUrl("https://csat.example.com", CRYPTO_SECRET, "acme.com");
+const res = await fetch(url, { method: "POST" });
+const { invite_url } = await res.json();   // give invite_url to the customer
+```
+
+```python
+from mint_link import provision_url
+import requests
+url = provision_url("https://csat.example.com", CRYPTO_SECRET, "acme.com")
+invite_url = requests.post(url).json()["invite_url"]
+```
