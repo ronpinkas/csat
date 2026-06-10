@@ -3,15 +3,24 @@
 [![CI](https://github.com/ronpinkas/csat/actions/workflows/ci.yml/badge.svg)](https://github.com/ronpinkas/csat/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A self-contained, **configurable** survey + analytics app in a single Go binary. Ships a CSAT
-instrument by default; define your own questions in a `survey.json`.
+A self-contained, **configurable** survey + analytics app in a single Go binary. Runs single-tenant
+out of the box, or **optionally multi-tenant** — one flag turns it into a platform that serves many
+customers from one host, each isolated in its own database. Ships a CSAT instrument by default;
+design your own questions right in the admin UI.
 
-- **Public survey** reached via a tokenized link (e.g. an SMS after a support call, an email
-  after an order). The questions are defined in `survey.json` — **stars, scales, NPS,
-  single/multi-choice, free text** — each with per-language labels.
-- **Admin dashboard** (authenticated) that **auto-adapts to your questions**: per-question KPIs,
-  distributions, NPS, breakdowns, daily trend, recent comments, and CSV export — all over a
-  selectable date range.
+- **Public survey** reached via a tokenized link (an SMS after a support call, an email after an
+  order): **stars, scales, NPS, single/multi-choice, free text**, each with per-language labels.
+- **Visual Survey Designer** — build and edit questions in the browser (no JSON, no restart). Each
+  edit publishes a new versioned **question set**, and every response stays tied to the set it was
+  answered with, so analytics never mix instruments.
+- **Admin dashboard** that **auto-adapts to your questions**: per-question KPIs, distributions, NPS,
+  breakdowns, daily trend, recent comments, and CSV export — over a selectable date range *and*
+  question set.
+- **Per-tenant branding** — name, accent color, and logo, editable in Settings (applied to the
+  survey and admin UI alike).
+- **Optionally multi-tenant** — `[tenancy] mode = "multi"` gives each tenant ("ref") its own
+  database; the platform onboards customers self-serve via a signed `/provision` call that returns
+  an admin invite link (no shared password). Single-tenant deployments are byte-for-byte unchanged.
 - **One binary.** SQLite (pure-Go), all HTML/CSS/JS + Chart.js embedded. No runtime, no
   `node_modules`. Cross-compiles to a static Linux binary from any OS.
 
@@ -21,6 +30,12 @@ Admin dashboard — **auto-adapts to your questions**: per-question KPIs, NPS, d
 choice/multichoice breakdowns, daily trend, and recent comments, over a selectable date range:
 
 ![Admin dashboard](docs/screenshots/dashboard.png)
+
+The **visual Survey Designer** — add / reorder / delete question cards, pick a type (stars, scale,
+NPS, single/multi choice, free text), set per-language labels and options, all in the browser.
+Publishing versions it as a new question set — no JSON, no restart:
+
+![Survey Designer](docs/screenshots/survey-designer.png)
 
 Built-in **user management** — invite admins or read-only viewers by link, issue a single-use
 password-reset link, deactivate, or delete any account. Self-service reset requests surface here
