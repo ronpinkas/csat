@@ -10,9 +10,23 @@ type loginView struct {
 	base
 	FormCSRF string
 	Error    string
+	// Multi shows a "Domain" field (multi-tenant standalone login); RefLocked
+	// hides it because the tenant arrived via a ?ref= sign-in link.
+	Multi     bool
+	RefLocked bool
 }
 
 func (a *Admin) loginForm(w http.ResponseWriter, r *http.Request) {
+	// Multi-tenant with no ?ref: show the form with a Domain field so a
+	// password admin can sign in directly (no sign-in link needed).
+	if a.provider.Multi() && r.URL.Query().Get("ref") == "" {
+		a.render(w, http.StatusOK, "login.tmpl", loginView{
+			base:     a.publicBase(""),
+			FormCSRF: csrf.Issue(w, a.secure),
+			Multi:    true,
+		})
+		return
+	}
 	db, ref, ok := a.tenantFor(r)
 	if !ok {
 		a.render(w, http.StatusOK, "login.tmpl", loginView{
@@ -25,8 +39,10 @@ func (a *Admin) loginForm(w http.ResponseWriter, r *http.Request) {
 		a.ensureTenant(db, ref) // seed this tenant's admin on first touch
 	}
 	a.render(w, http.StatusOK, "login.tmpl", loginView{
-		base:     a.publicBase(ref),
-		FormCSRF: csrf.Issue(w, a.secure),
+		base:      a.publicBase(ref),
+		FormCSRF:  csrf.Issue(w, a.secure),
+		Multi:     a.provider.Multi(),
+		RefLocked: a.provider.Multi(),
 	})
 }
 
@@ -35,9 +51,11 @@ func (a *Admin) login(w http.ResponseWriter, r *http.Request) {
 	db, ref, ok := a.tenantFor(r)
 	renderErr := func(msg string) {
 		a.render(w, http.StatusOK, "login.tmpl", loginView{
-			base:     a.publicBase(ref),
-			FormCSRF: csrf.Issue(w, a.secure),
-			Error:    msg,
+			base:      a.publicBase(ref),
+			FormCSRF:  csrf.Issue(w, a.secure),
+			Error:     msg,
+			Multi:     a.provider.Multi(),
+			RefLocked: a.provider.Multi() && r.URL.Query().Get("ref") != "",
 		})
 	}
 	if !ok {

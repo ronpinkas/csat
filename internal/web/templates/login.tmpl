@@ -7,7 +7,14 @@
   {{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
   <form method="POST" action="/login">
     <input type="hidden" name="csrf" value="{{.FormCSRF}}">
-    {{if .Ref}}<input type="hidden" name="ref" value="{{.Ref}}">{{end}}
+    {{if .RefLocked}}
+      <input type="hidden" name="ref" value="{{.Ref}}">
+    {{else if .Multi}}
+    <div class="form-row">
+      <label for="ref">Domain</label>
+      <input id="ref" name="ref" value="{{.Ref}}" placeholder="example.com" required>
+    </div>
+    {{end}}
     <div class="form-row">
       <label for="username">Username</label>
       <input id="username" name="username" autocomplete="username" autofocus required>
