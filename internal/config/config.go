@@ -107,7 +107,11 @@ type Server struct {
 	ListenAddr     string   `toml:"listen_addr"`
 	TrustProxy     bool     `toml:"trust_proxy"`
 	TrustedProxies []string `toml:"trusted_proxies"`
-	TLS            TLS      `toml:"tls"`
+	// SecureCookies forces the Secure flag on cookies even when this process does
+	// not terminate TLS itself — set it when running behind a TLS-terminating
+	// reverse proxy (e.g. Caddy in the appliance). Autocert mode implies it.
+	SecureCookies bool `toml:"secure_cookies"`
+	TLS           TLS  `toml:"tls"`
 }
 
 type TLS struct {

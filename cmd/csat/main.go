@@ -132,7 +132,7 @@ func main() {
 	}
 	log.Printf("survey: %d question(s) in the seed definition", len(def.Questions))
 
-	secure := cfg.Server.TLS.Mode == "autocert"
+	secure := cfg.Server.TLS.Mode == "autocert" || cfg.Server.SecureCookies
 	static, err := web.StaticHandler()
 	if err != nil {
 		log.Fatalf("static: %v", err)
