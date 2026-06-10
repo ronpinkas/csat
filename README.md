@@ -169,6 +169,12 @@ the not-after expiry): use `csat -mint-tenant -ref acme.com -base …`, or the `
 `provision_url` helpers in [`integrations/`](integrations/). Hand the returned `invite_url` to the
 customer. (Onboarding needs no DNS, no certificate, no restart.)
 
+> **The crypto secret is a deployment-wide master key.** It signs survey links *and* provisioning
+> tokens, so anyone holding it could forge links or provision/seize any tenant. In multi-tenant mode
+> it is held only by the platform and **never shown to tenant admins** — the Settings page hides it
+> (single-tenant operators, who own the deployment, still see it). One host-level secret, set once
+> (env `CSAT_CRYPTO_SECRET` or the auto-generated keyfile); tenants self-serve and never touch it.
+
 > Legacy fallback: when no platform integration is used, a tenant's admin is still seeded on first
 > `/login?ref=` from `admin.username` / `CSAT_ADMIN_INITIAL_PW` — fine for testing, but prefer
 > `/provision` in production so each tenant's first admin sets its own password.

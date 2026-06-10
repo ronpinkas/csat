@@ -159,10 +159,18 @@ func (a *Admin) renderSettings(w http.ResponseWriter, r *http.Request, errMsg st
 	db := tenantDB(r.Context())
 	b := brandstore.Resolve(db, a.cfg.Site.Name, a.cfg.Branding.ThemeColor)
 	_, hasLogo := brandstore.LogoVersion(db)
+	// The crypto secret is a deployment-wide master key (it signs survey links
+	// AND tenant-provisioning tokens). In multi-tenant mode it must never be
+	// shown to a tenant admin — the platform holds it. Single-tenant operators
+	// own the deployment, so they still see it.
+	secret, keyPath := "", ""
+	if !a.provider.Multi() {
+		secret, keyPath = a.secret, a.cfg.Security.CryptoKeyPath
+	}
 	a.render(w, http.StatusOK, "settings.tmpl", settingsView{
 		base:       a.newBase(r),
-		Secret:     a.secret,
-		KeyPath:    a.cfg.Security.CryptoKeyPath,
+		Secret:     secret,
+		KeyPath:    keyPath,
 		SiteName:   b.SiteName,
 		ThemeColor: b.ThemeColor,
 		HasLogo:    hasLogo,

@@ -8,6 +8,30 @@ import (
 	"github.com/ronpinkas/csat/internal/brandstore"
 )
 
+// TestSecretHiddenFromTenants: the deployment crypto secret (a master key that
+// can forge links and provision tenants) is shown to a single-tenant operator
+// but never to a tenant admin in multi-tenant mode.
+func TestSecretHiddenFromTenants(t *testing.T) {
+	// single-tenant: shown.
+	srv, _ := newServer(t)
+	admin := loginAdmin(t, srv)
+	_, page := getBody(t, admin, srv.URL+"/settings")
+	if !strings.Contains(page, "Survey-link secret") {
+		t.Fatalf("single-tenant settings should show the survey-link secret: %s", first(page, 300))
+	}
+
+	// multi-tenant: hidden, and the value must not leak.
+	msrv, _ := newMultiServer(t)
+	madmin := loginAdminMulti(t, msrv, "acme.com")
+	_, mpage := getBody(t, madmin, msrv.URL+"/settings")
+	if strings.Contains(mpage, "Survey-link secret") {
+		t.Fatalf("multi-tenant settings must not show the secret card: %s", first(mpage, 400))
+	}
+	if strings.Contains(mpage, multiSecret) {
+		t.Fatal("the deployment secret leaked to a tenant admin")
+	}
+}
+
 // TestBrandingSaved: the Settings tab saves per-tenant name + color, the admin
 // pages reflect the new name, and an invalid color is rejected.
 func TestBrandingSaved(t *testing.T) {
