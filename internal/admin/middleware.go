@@ -3,7 +3,11 @@ package admin
 import (
 	"context"
 	"crypto/subtle"
+	"database/sql"
+	"encoding/base64"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,18 +64,27 @@ func (a *Admin) adminCSRF(h http.HandlerFunc) http.Handler {
 }
 
 // requireAuth loads the session/user into context, redirecting to /login if
-// absent and to the password-change page while a forced change is pending.
+// absent and to the password-change page while a forced change is pending. The
+// tenant ref is recovered from the session cookie, so authenticated navigation
+// never needs ?ref in the URL.
 func (a *Admin) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(sessionCookie)
 		if err != nil || c.Value == "" {
-			redirectLogin(w, r)
+			a.redirectLogin(w, r, "")
 			return
 		}
-		sess, user, err := lookupSession(a.db, c.Value)
+		ref, raw := a.decodeSession(c.Value)
+		db, err := a.provider.DB(ref)
 		if err != nil {
 			a.clearSessionCookie(w)
-			redirectLogin(w, r)
+			a.redirectLogin(w, r, ref)
+			return
+		}
+		sess, user, err := lookupSession(db, raw)
+		if err != nil {
+			a.clearSessionCookie(w)
+			a.redirectLogin(w, r, ref)
 			return
 		}
 		if user.MustChangePW && !passwordChangeAllowed(r.URL.Path) {
@@ -80,8 +93,67 @@ func (a *Admin) requireAuth(next http.Handler) http.Handler {
 		}
 		ctx := context.WithValue(r.Context(), userKey, user)
 		ctx = context.WithValue(ctx, sessKey, sess)
+		ctx = context.WithValue(ctx, tdbKey, db)
+		ctx = context.WithValue(ctx, refKey, ref)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// refFromRequest reads the tenant ref from ?ref= (or a ref form field) in
+// multi-tenant mode; single-tenant mode always resolves to "".
+func (a *Admin) refFromRequest(r *http.Request) string {
+	if !a.provider.Multi() {
+		return ""
+	}
+	return strings.TrimSpace(r.FormValue("ref"))
+}
+
+// tenantFor resolves the tenant database for a pre-session page (login, invite,
+// forgot, reset). ok is false when the ref is invalid in multi-tenant mode.
+func (a *Admin) tenantFor(r *http.Request) (db *sql.DB, ref string, ok bool) {
+	ref = a.refFromRequest(r)
+	db, err := a.provider.DB(ref)
+	if err != nil {
+		return nil, ref, false
+	}
+	return db, ref, true
+}
+
+// encodeSession/decodeSession bind the tenant ref to the session cookie in
+// multi-tenant mode (single mode stores the raw token unchanged, so existing
+// cookies keep working across the upgrade).
+func (a *Admin) encodeSession(ref, raw string) string {
+	if !a.provider.Multi() {
+		return raw
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(ref)) + "." + raw
+}
+
+func (a *Admin) decodeSession(v string) (ref, raw string) {
+	if !a.provider.Multi() {
+		return "", v
+	}
+	i := strings.IndexByte(v, '.')
+	if i < 0 {
+		return "", v
+	}
+	b, err := base64.RawURLEncoding.DecodeString(v[:i])
+	if err != nil {
+		return "", v[i+1:]
+	}
+	return string(b), v[i+1:]
+}
+
+// withRef appends the tenant ref to a path's query (no-op when ref is empty).
+func withRef(path, ref string) string {
+	if ref == "" {
+		return path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + "ref=" + url.QueryEscape(ref)
 }
 
 func (a *Admin) requireRole(role string, next http.Handler) http.Handler {
@@ -110,14 +182,14 @@ func passwordChangeAllowed(path string) bool {
 	return path == "/account/password" || path == "/logout"
 }
 
-func redirectLogin(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+func (a *Admin) redirectLogin(w http.ResponseWriter, r *http.Request, ref string) {
+	http.Redirect(w, r, withRef("/login", ref), http.StatusSeeOther)
 }
 
-func (a *Admin) setSessionCookie(w http.ResponseWriter, raw string) {
+func (a *Admin) setSessionCookie(w http.ResponseWriter, ref, raw string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
-		Value:    raw,
+		Value:    a.encodeSession(ref, raw),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   a.secure,

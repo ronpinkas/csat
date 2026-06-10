@@ -11,6 +11,7 @@
     <form method="POST" action="/invite?t={{.Token}}">
       <input type="hidden" name="csrf" value="{{.FormCSRF}}">
       <input type="hidden" name="t" value="{{.Token}}">
+      {{if .Ref}}<input type="hidden" name="ref" value="{{.Ref}}">{{end}}
       <div class="form-row">
         <label for="username">Username</label>
         <input id="username" name="username" value="{{.Username}}" {{if .PresetUsername}}readonly{{end}} autocomplete="username" required>

@@ -1,6 +1,7 @@
 package survey
 
 import (
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/db"
 	"github.com/ronpinkas/csat/internal/surveydef"
+	"github.com/ronpinkas/csat/internal/tenant"
 	"github.com/ronpinkas/csat/internal/token"
 	"github.com/ronpinkas/csat/internal/web"
 )
@@ -33,12 +35,12 @@ func newTestHandlers(t *testing.T) *Handlers {
 	}
 	cfg := &config.Config{}
 	cfg.Site.Name = "Test Co"
-	return New(database, tmpl, cfg, surveydef.Default(), secret, false)
+	return New(tenant.WrapSingle(database), tmpl, cfg, surveydef.Default(), secret, false)
 }
 
 func TestSurveyFlow(t *testing.T) {
 	h := newTestHandlers(t)
-	tok, err := token.Encrypt(secret, "+15551234567", 1717286400, "en")
+	tok, err := token.Encrypt(secret, "+15551234567", 1717286400, "en", "")
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}
@@ -83,7 +85,7 @@ func TestSurveyFlow(t *testing.T) {
 
 func TestSpanishForm(t *testing.T) {
 	h := newTestHandlers(t)
-	tok, _ := token.Encrypt(secret, "+5999123456", 1717286400, "es")
+	tok, _ := token.Encrypt(secret, "+5999123456", 1717286400, "es", "")
 	req := httptest.NewRequest(http.MethodGet, "/s?t="+url.QueryEscape(tok), nil)
 	rec := httptest.NewRecorder()
 	h.Form(rec, req)
@@ -104,7 +106,7 @@ func TestSpanishForm(t *testing.T) {
 
 func TestTamperedTokenRejected(t *testing.T) {
 	h := newTestHandlers(t)
-	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en")
+	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en", "")
 	bad := tok[:len(tok)-2] + "AA"
 	req := httptest.NewRequest(http.MethodGet, "/s?t="+url.QueryEscape(bad), nil)
 	rec := httptest.NewRecorder()
@@ -116,7 +118,7 @@ func TestTamperedTokenRejected(t *testing.T) {
 
 func TestMissingFieldRejected(t *testing.T) {
 	h := newTestHandlers(t)
-	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en")
+	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en", "")
 	rec := postSubmit(t, h, tok, "c", url.Values{
 		"csrf": {"c"}, "csat": {"5"}, "resolution": {"yes"}, // missing ces
 	})
@@ -130,7 +132,7 @@ func TestMissingFieldRejected(t *testing.T) {
 
 func TestBadCSRFRejected(t *testing.T) {
 	h := newTestHandlers(t)
-	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en")
+	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en", "")
 	// cookie and form value differ
 	body := url.Values{"csrf": {"form-val"}, "csat": {"5"}, "resolution": {"yes"}, "ces": {"6"}}.Encode()
 	req := httptest.NewRequest(http.MethodPost, "/s?t="+url.QueryEscape(tok), strings.NewReader(body))
@@ -153,10 +155,54 @@ func postSubmit(t *testing.T, h *Handlers, tok, csrfCookie string, form url.Valu
 	return rec
 }
 
-func countResponses(t *testing.T, h *Handlers) int {
+// TestMultiTenantSurveyRouting: the tenant ref encoded in the token routes the
+// response to that tenant's database only.
+func TestMultiTenantSurveyRouting(t *testing.T) {
+	prov, err := tenant.NewMulti(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = prov.Close() })
+	tmpl, err := web.LoadTemplates(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{}
+	cfg.Site.Name = "Multi Co"
+	h := New(prov, tmpl, cfg, surveydef.Default(), secret, false)
+
+	tok, _ := token.Encrypt(secret, "+15551234567", 1717286400, "en", "acme")
+	rec := postSubmit(t, h, tok, "c", url.Values{
+		"csrf": {"c"}, "csat": {"5"}, "resolution": {"yes"}, "ces": {"6"},
+	})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "recorded") {
+		t.Fatalf("submit: %d %q", rec.Code, rec.Body.String())
+	}
+
+	acme, _ := prov.DB("acme")
+	globex, _ := prov.DB("globex")
+	if n := countIn(t, acme); n != 1 {
+		t.Fatalf("acme should have the response, got %d", n)
+	}
+	if n := countIn(t, globex); n != 0 {
+		t.Fatalf("globex must be empty, got %d", n)
+	}
+}
+
+func countIn(t *testing.T, db *sql.DB) int {
 	t.Helper()
 	var n int
-	if err := h.db.QueryRow(`SELECT COUNT(*) FROM responses`).Scan(&n); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM responses`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func countResponses(t *testing.T, h *Handlers) int {
+	t.Helper()
+	db, _ := h.provider.DB("")
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM responses`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	return n

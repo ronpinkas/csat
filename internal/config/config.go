@@ -24,11 +24,27 @@ type Config struct {
 	Site     Site     `toml:"site"`
 	Server   Server   `toml:"server"`
 	DB       DB       `toml:"db"`
+	Tenancy  Tenancy  `toml:"tenancy"`
 	Security Security `toml:"security"`
 	Admin    Admin    `toml:"admin"`
 	Survey   Survey   `toml:"survey"`
 	Branding Branding `toml:"branding"`
 }
+
+// Tenancy selects single- vs multi-tenant operation.
+//
+// "single" (the default) keeps the historical behavior exactly: one database at
+// db.path, no ref anywhere. "multi" gives each tenant ("ref") its own SQLite
+// database under data_dir; the tenant is resolved per request — from the survey
+// token for public survey pages, and from ?ref= (then the session cookie) for
+// admin pages. The two modes are mutually exclusive per deployment.
+type Tenancy struct {
+	Mode    string `toml:"mode"`     // "single" (default) | "multi"
+	DataDir string `toml:"data_dir"` // multi mode: dir holding one <ref>.db per tenant
+}
+
+// Multi reports whether multi-tenant mode is enabled.
+func (t Tenancy) Multi() bool { return t.Mode == "multi" }
 
 type Site struct {
 	Name            string `toml:"name"`
@@ -269,8 +285,18 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("invalid server.tls.mode %q (want off|autocert)", c.Server.TLS.Mode)
 	}
-	if c.DB.Path == "" {
-		return errors.New("db.path is required")
+	switch c.Tenancy.Mode {
+	case "", "single":
+		c.Tenancy.Mode = "single"
+		if c.DB.Path == "" {
+			return errors.New("db.path is required")
+		}
+	case "multi":
+		if c.Tenancy.DataDir == "" {
+			return errors.New("tenancy.data_dir is required when mode=multi")
+		}
+	default:
+		return fmt.Errorf("invalid tenancy.mode %q (want single|multi)", c.Tenancy.Mode)
 	}
 	if c.Admin.Username == "" {
 		return errors.New("admin.username is required")

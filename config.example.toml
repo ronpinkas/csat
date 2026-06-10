@@ -20,7 +20,16 @@ email     = ""                      # OPTIONAL Let's Encrypt/ACME contact (autoc
                                     # The app sends no other email.
 
 [db]
-path = "/var/lib/csat/csat.db"
+path = "/var/lib/csat/csat.db"   # used in single-tenant mode (the default)
+
+[tenancy]
+# "single" (default): one database at db.path — the historical behavior, unchanged.
+# "multi": one database per tenant ("ref") under data_dir, created on first use.
+#   The tenant rides in the survey token (mint with -ref) and in ?ref= on the
+#   admin sign-in link; the session cookie then pins it. Use this for the shared
+#   platform appliance that serves many customers from one fixed host.
+mode     = "single"
+# data_dir = "/var/lib/csat/tenants"   # required when mode = "multi"
 
 [security]
 # Long-lived secret shared with the call platform's link-builder. Leave as the env reference

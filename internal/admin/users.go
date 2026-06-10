@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ func (a *Admin) renderUsersWithReset(w http.ResponseWriter, r *http.Request, res
 }
 
 func (a *Admin) renderUsersView(w http.ResponseWriter, r *http.Request, v usersView) {
-	users, err := listUsers(a.db)
+	users, err := listUsers(tenantDB(r.Context()))
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -46,12 +47,12 @@ func (a *Admin) createInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
 
-	raw, err := createInviteRow(a.db, role, username, u.ID, a.inviteTTL)
+	raw, err := createInviteRow(tenantDB(r.Context()), role, username, u.ID, a.inviteTTL)
 	if err != nil {
 		a.renderUsers(w, r, "", "Could not create invite. Please try again.")
 		return
 	}
-	link := requestBaseURL(a, r) + "/invite?t=" + raw
+	link := requestBaseURL(a, r) + withRef("/invite?t="+raw, refFrom(r.Context()))
 	a.renderUsers(w, r, link, "")
 }
 
@@ -66,25 +67,26 @@ func (a *Admin) deactivate(w http.ResponseWriter, r *http.Request) {
 		a.renderUsers(w, r, "", "You can't deactivate your own account.")
 		return
 	}
-	target, err := userByID(a.db, id)
+	db := tenantDB(r.Context())
+	target, err := userByID(db, id)
 	if err != nil {
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 		return
 	}
-	if target.Role == RoleAdmin && a.activeAdminCount() <= 1 {
+	if target.Role == RoleAdmin && activeAdminCount(db) <= 1 {
 		a.renderUsers(w, r, "", "You can't deactivate the last active admin.")
 		return
 	}
-	if err := deactivateUser(a.db, id); err != nil {
+	if err := deactivateUser(db, id); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/users", http.StatusSeeOther)
 }
 
-func (a *Admin) activeAdminCount() int {
+func activeAdminCount(db *sql.DB) int {
 	var n int
-	_ = a.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = ? AND active = 1`, RoleAdmin).Scan(&n)
+	_ = db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = ? AND active = 1`, RoleAdmin).Scan(&n)
 	return n
 }
 

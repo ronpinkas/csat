@@ -108,16 +108,20 @@ type inviteView struct {
 }
 
 func (a *Admin) inviteRedeemForm(w http.ResponseWriter, r *http.Request) {
+	db, ref, ok := a.tenantFor(r)
 	tok := r.URL.Query().Get("t")
-	inv, err := inviteByToken(a.db, tok)
-	if err != nil {
+	var inv *Invite
+	if ok {
+		inv, _ = inviteByToken(db, tok)
+	}
+	if !ok || inv == nil {
 		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
-			base: a.publicBase(), Invalid: true,
+			base: a.publicBase(ref), Invalid: true,
 		})
 		return
 	}
 	a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
-		base:           a.publicBase(),
+		base:           a.publicBase(ref),
 		FormCSRF:       csrf.Issue(w, a.secure),
 		Token:          tok,
 		Username:       inv.Username.String,
@@ -127,15 +131,19 @@ func (a *Admin) inviteRedeemForm(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) inviteRedeem(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	db, ref, ok := a.tenantFor(r)
 	tok := r.URL.Query().Get("t")
 	if tok == "" {
 		tok = r.PostFormValue("t")
 	}
 
-	inv, err := inviteByToken(a.db, tok)
-	if err != nil {
+	var inv *Invite
+	if ok {
+		inv, _ = inviteByToken(db, tok)
+	}
+	if !ok || inv == nil {
 		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
-			base: a.publicBase(), Invalid: true,
+			base: a.publicBase(ref), Invalid: true,
 		})
 		return
 	}
@@ -149,7 +157,7 @@ func (a *Admin) inviteRedeem(w http.ResponseWriter, r *http.Request) {
 
 	rerender := func(msg string) {
 		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
-			base:           a.publicBase(),
+			base:           a.publicBase(ref),
 			FormCSRF:       csrf.Issue(w, a.secure),
 			Token:          tok,
 			Username:       username,
@@ -179,14 +187,14 @@ func (a *Admin) inviteRedeem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	switch err := redeemInvite(a.db, inv, username, hash); {
+	switch err := redeemInvite(db, inv, username, hash); {
 	case err == nil:
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, withRef("/login", ref), http.StatusSeeOther)
 	case errors.Is(err, errUsernameTaken):
 		rerender("That username is already taken.")
 	case errors.Is(err, errNotFound):
 		a.render(w, http.StatusOK, "invite_redeem.tmpl", inviteView{
-			base: a.publicBase(), Invalid: true,
+			base: a.publicBase(ref), Invalid: true,
 		})
 	default:
 		http.Error(w, "internal error", http.StatusInternalServerError)

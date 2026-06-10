@@ -13,20 +13,39 @@ type loginView struct {
 }
 
 func (a *Admin) loginForm(w http.ResponseWriter, r *http.Request) {
+	db, ref, ok := a.tenantFor(r)
+	if !ok {
+		a.render(w, http.StatusOK, "login.tmpl", loginView{
+			base:  a.publicBase(ref),
+			Error: "Please use the sign-in link provided for your account.",
+		})
+		return
+	}
+	if a.provider.Multi() {
+		a.ensureTenant(db, ref) // seed this tenant's admin on first touch
+	}
 	a.render(w, http.StatusOK, "login.tmpl", loginView{
-		base:     a.publicBase(),
+		base:     a.publicBase(ref),
 		FormCSRF: csrf.Issue(w, a.secure),
 	})
 }
 
 func (a *Admin) login(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	db, ref, ok := a.tenantFor(r)
 	renderErr := func(msg string) {
 		a.render(w, http.StatusOK, "login.tmpl", loginView{
-			base:     a.publicBase(),
+			base:     a.publicBase(ref),
 			FormCSRF: csrf.Issue(w, a.secure),
 			Error:    msg,
 		})
+	}
+	if !ok {
+		renderErr("Please use the sign-in link provided for your account.")
+		return
+	}
+	if a.provider.Multi() {
+		a.ensureTenant(db, ref)
 	}
 
 	if !csrf.Check(r) {
@@ -36,42 +55,47 @@ func (a *Admin) login(w http.ResponseWriter, r *http.Request) {
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
 
-	if a.throttle.blocked(username) {
+	if a.throttle.blocked(ref + "\x00" + username) {
 		renderErr("Too many attempts. Please wait a few minutes and try again.")
 		return
 	}
 
-	user, err := userByUsername(a.db, username)
+	user, err := userByUsername(db, username)
 	if err != nil {
 		// keep timing uniform for unknown users
 		verifyPassword(dummyHash, password)
-		a.throttle.fail(username)
+		a.throttle.fail(ref + "\x00" + username)
 		renderErr("Invalid username or password.")
 		return
 	}
 	if !user.Active || !verifyPassword(user.PasswordHash, password) {
-		a.throttle.fail(username)
+		a.throttle.fail(ref + "\x00" + username)
 		renderErr("Invalid username or password.")
 		return
 	}
 
-	a.throttle.reset(username)
-	raw, _, err := createSession(a.db, user.ID, a.sessionTTL)
+	a.throttle.reset(ref + "\x00" + username)
+	raw, _, err := createSession(db, user.ID, a.sessionTTL)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	a.setSessionCookie(w, raw)
-	setLastLogin(a.db, user.ID)
+	a.setSessionCookie(w, ref, raw)
+	setLastLogin(db, user.ID)
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
 func (a *Admin) logout(w http.ResponseWriter, r *http.Request) {
+	ref := refFrom(r.Context())
 	if c, err := r.Cookie(sessionCookie); err == nil {
-		deleteSession(a.db, c.Value)
+		if _, raw := a.decodeSession(c.Value); raw != "" {
+			if db, derr := a.provider.DB(ref); derr == nil {
+				deleteSession(db, raw)
+			}
+		}
 	}
 	a.clearSessionCookie(w)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, withRef("/login", ref), http.StatusSeeOther)
 }
 
 func (a *Admin) home(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +148,7 @@ func (a *Admin) changePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	if err := setPassword(a.db, u.ID, hash); err != nil {
+	if err := setPassword(tenantDB(r.Context()), u.ID, hash); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

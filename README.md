@@ -105,15 +105,17 @@ validates it. The token **encrypts** the caller id and call time (nothing sensit
 the URL) and is self-authenticating.
 
 ```
-key   = SHA-256(crypto_secret)                            // 32 bytes
-pt    = subject + "|" + subjectTimeUnixSeconds + "|" + lang  // none of the fields may contain "|"
+key   = SHA-256(crypto_secret)                                       // 32 bytes
+pt    = subject + "|" + subjectTimeUnixSeconds + "|" + lang [+ "|" + ref]  // fields may not contain "|"
 nonce = 12 random bytes
-ct    = AES-256-GCM_Seal(key, nonce, pt)                  // no associated data
-token = base64url_nounpad( nonce || ct )                  // ct includes the 16-byte tag
+ct    = AES-256-GCM_Seal(key, nonce, pt)                             // no associated data
+token = base64url_nounpad( nonce || ct )                            // ct includes the 16-byte tag
 ```
 
 `subject` is whatever the survey is about — a phone number, order id, ticket id, … `lang` is the
-survey language: `en` or `es` (anything else falls back to `en`). The `crypto_secret` is the
+survey language: `en` or `es` (anything else falls back to `en`). The optional 4th field `ref`
+binds the token to a tenant in **multi-tenant mode** (below); omit it for single-tenant
+deployments and existing links keep working byte-for-byte. The `crypto_secret` is the
 per-deployment value shown on the admin **Settings** page; use the same value on both sides.
 There is **no expiry**; each link is **single-use** (a second submit for the same subject+time is
 rejected). Ready-made link builders are in [`integrations/`](integrations/) (Python + Node).
@@ -123,6 +125,35 @@ Generate a test link:
 ```sh
 dist/csat -config config.toml -mint -subject "+15551234567" -ts 1717286400 -lang es -base "http://localhost:8080"
 ```
+
+## Multi-tenant mode
+
+CSAT runs single-tenant by default — one database, no `ref` anywhere — exactly as it always has.
+Set `[tenancy] mode = "multi"` to serve **many customers from one fixed host** (e.g. the shared
+`csat.example.com` appliance). Each tenant ("ref" — typically the customer's domain) gets its own
+SQLite database under `data_dir`, created and migrated on first use. Tenants are isolated by the
+file boundary: separate users, sessions, invites, and responses, with **no shared tables**.
+
+```toml
+[tenancy]
+mode     = "multi"
+data_dir = "/var/lib/csat/tenants"   # one <ref>.db per tenant
+```
+
+How the tenant travels with each request:
+
+| Surface | How `ref` is carried |
+| --- | --- |
+| Survey link | Encoded **inside the token** (tamper-proof). Mint with `-ref`: `csat … -mint -subject … -ref acme.com` |
+| Admin sign-in | `?ref=acme.com` on the `/login` link; the session cookie then pins the tenant for all later requests |
+
+Onboarding a customer needs **no DNS, no certificate, no restart** — the platform simply starts
+minting links (and an admin sign-in link) with the new `ref`; the tenant database is created on
+first touch and its admin is seeded automatically (`admin.username` / `CSAT_ADMIN_INITIAL_PW`).
+
+Backward compatibility is by construction: a single-tenant deployment (like an existing on-prem
+install) never sets the flag, never migrates, and is byte-for-byte unchanged. The two modes are
+mutually exclusive per deployment.
 
 ## Survey definition (`survey.json`)
 

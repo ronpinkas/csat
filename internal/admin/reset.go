@@ -121,30 +121,31 @@ type forgotView struct {
 
 func (a *Admin) forgotForm(w http.ResponseWriter, r *http.Request) {
 	a.render(w, http.StatusOK, "forgot.tmpl", forgotView{
-		base:     a.publicBase(),
+		base:     a.publicBase(a.refFromRequest(r)),
 		FormCSRF: csrf.Issue(w, a.secure),
 	})
 }
 
 func (a *Admin) forgot(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	db, ref, ok := a.tenantFor(r)
 	if !csrf.Check(r) {
 		a.render(w, http.StatusOK, "forgot.tmpl", forgotView{
-			base:     a.publicBase(),
+			base:     a.publicBase(ref),
 			FormCSRF: csrf.Issue(w, a.secure),
 			Error:    "Your session expired. Please try again.",
 		})
 		return
 	}
 	username := strings.TrimSpace(r.PostFormValue("username"))
-	if username != "" {
+	if ok && username != "" {
 		// Best-effort: a missing username is a no-op inside the store call.
-		_ = requestPasswordReset(a.db, username)
+		_ = requestPasswordReset(db, username)
 	}
-	// Always the same response, whether or not the account exists, so the page
-	// can't be used to enumerate usernames.
+	// Always the same response, whether or not the account (or tenant) exists, so
+	// the page can't be used to enumerate usernames.
 	a.render(w, http.StatusOK, "forgot.tmpl", forgotView{
-		base: a.publicBase(),
+		base: a.publicBase(ref),
 		Sent: true,
 	})
 }
@@ -160,13 +161,18 @@ type resetView struct {
 }
 
 func (a *Admin) resetForm(w http.ResponseWriter, r *http.Request) {
+	db, ref, ok := a.tenantFor(r)
 	tok := r.URL.Query().Get("t")
-	if _, err := resetByToken(a.db, tok); err != nil {
-		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(), Invalid: true})
+	if !ok {
+		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(ref), Invalid: true})
+		return
+	}
+	if _, err := resetByToken(db, tok); err != nil {
+		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(ref), Invalid: true})
 		return
 	}
 	a.render(w, http.StatusOK, "reset.tmpl", resetView{
-		base:     a.publicBase(),
+		base:     a.publicBase(ref),
 		FormCSRF: csrf.Issue(w, a.secure),
 		Token:    tok,
 	})
@@ -174,19 +180,24 @@ func (a *Admin) resetForm(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) reset(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	db, ref, ok := a.tenantFor(r)
 	tok := r.URL.Query().Get("t")
 	if tok == "" {
 		tok = r.PostFormValue("t")
 	}
 
-	if _, err := resetByToken(a.db, tok); err != nil {
-		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(), Invalid: true})
+	if !ok {
+		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(ref), Invalid: true})
+		return
+	}
+	if _, err := resetByToken(db, tok); err != nil {
+		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(ref), Invalid: true})
 		return
 	}
 
 	rerender := func(msg string) {
 		a.render(w, http.StatusOK, "reset.tmpl", resetView{
-			base:     a.publicBase(),
+			base:     a.publicBase(ref),
 			FormCSRF: csrf.Issue(w, a.secure),
 			Token:    tok,
 			Error:    msg,
@@ -212,11 +223,11 @@ func (a *Admin) reset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	switch err := redeemReset(a.db, tok, hash); {
+	switch err := redeemReset(db, tok, hash); {
 	case err == nil:
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, withRef("/login", ref), http.StatusSeeOther)
 	case errors.Is(err, errNotFound):
-		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(), Invalid: true})
+		a.render(w, http.StatusOK, "reset.tmpl", resetView{base: a.publicBase(ref), Invalid: true})
 	default:
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
@@ -227,27 +238,29 @@ func (a *Admin) reset(w http.ResponseWriter, r *http.Request) {
 // resetUser mints a reset link an admin can hand to a user who has lost access.
 func (a *Admin) resetUser(w http.ResponseWriter, r *http.Request) {
 	u := userFrom(r.Context())
+	db := tenantDB(r.Context())
 	id, err := strconv.ParseInt(r.PostFormValue("user_id"), 10, 64)
 	if err != nil {
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 		return
 	}
-	if _, err := userByID(a.db, id); err != nil {
+	if _, err := userByID(db, id); err != nil {
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 		return
 	}
-	raw, err := createResetRow(a.db, id, u.ID, a.inviteTTL)
+	raw, err := createResetRow(db, id, u.ID, a.inviteTTL)
 	if err != nil {
 		a.renderUsers(w, r, "", "Could not create a reset link. Please try again.")
 		return
 	}
-	link := requestBaseURL(a, r) + "/reset?t=" + raw
+	link := requestBaseURL(a, r) + withRef("/reset?t="+raw, refFrom(r.Context()))
 	a.renderUsersWithReset(w, r, link)
 }
 
 // deleteUser permanently removes an account (and frees its username for reuse).
 func (a *Admin) deleteUser(w http.ResponseWriter, r *http.Request) {
 	me := userFrom(r.Context())
+	db := tenantDB(r.Context())
 	id, err := strconv.ParseInt(r.PostFormValue("user_id"), 10, 64)
 	if err != nil {
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
@@ -257,16 +270,16 @@ func (a *Admin) deleteUser(w http.ResponseWriter, r *http.Request) {
 		a.renderUsers(w, r, "", "You can't delete your own account.")
 		return
 	}
-	target, err := userByID(a.db, id)
+	target, err := userByID(db, id)
 	if err != nil {
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 		return
 	}
-	if target.Role == RoleAdmin && adminCount(a.db) <= 1 {
+	if target.Role == RoleAdmin && adminCount(db) <= 1 {
 		a.renderUsers(w, r, "", "You can't delete the last admin account.")
 		return
 	}
-	if err := deleteUser(a.db, id); err != nil {
+	if err := deleteUser(db, id); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

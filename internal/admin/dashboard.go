@@ -28,7 +28,7 @@ func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) analytics(w http.ResponseWriter, r *http.Request) {
 	from, to, info, loc := a.parseRange(r)
-	res, err := computeAnalytics(a.db, a.def, from, to, loc, info)
+	res, err := computeAnalytics(tenantDB(r.Context()), a.def, from, to, loc, info)
 	if err != nil {
 		log.Printf("admin: analytics: %v", err)
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -72,7 +72,7 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 		args = append(args, k)
 	}
 	args = append(args, from, to, limit, page*limit)
-	rows, err := a.db.Query(
+	rows, err := tenantDB(r.Context()).Query(
 		`SELECT r.submitted_at, r.lang, a.question_key, a.text
 		 FROM answers a JOIN responses r ON a.response_id = r.id
 		 WHERE a.question_key IN (`+ph+`) AND a.text IS NOT NULL AND a.text <> ''
@@ -112,7 +112,7 @@ func (a *Admin) settings(w http.ResponseWriter, r *http.Request) {
 
 func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	from, to, info, _ := a.parseRange(r)
-	rows, err := a.db.Query(
+	rows, err := tenantDB(r.Context()).Query(
 		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, a.question_key, a.num, a.text
 		 FROM responses r LEFT JOIN answers a ON a.response_id = r.id
 		 WHERE r.submitted_at >= ? AND r.submitted_at < ? ORDER BY r.id`, from, to)

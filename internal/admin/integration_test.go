@@ -16,6 +16,7 @@ import (
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/db"
 	"github.com/ronpinkas/csat/internal/surveydef"
+	"github.com/ronpinkas/csat/internal/tenant"
 	"github.com/ronpinkas/csat/internal/web"
 )
 
@@ -44,7 +45,7 @@ func newServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	cfg.Admin.InitialPassword = initialPW
 	cfg.Security.SessionTTLHours, cfg.Security.InviteTTLHours = 12, 168
 
-	a, err := New(database, tmpl, cfg, surveydef.Default(), "integration-secret-32bytes-minimum-aaa", false)
+	a, err := New(tenant.WrapSingle(database), tmpl, cfg, surveydef.Default(), "integration-secret-32bytes-minimum-aaa", false)
 	if err != nil {
 		t.Fatalf("admin.New: %v", err)
 	}

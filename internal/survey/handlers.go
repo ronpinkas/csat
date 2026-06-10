@@ -15,23 +15,24 @@ import (
 	"github.com/ronpinkas/csat/internal/config"
 	"github.com/ronpinkas/csat/internal/csrf"
 	"github.com/ronpinkas/csat/internal/surveydef"
+	"github.com/ronpinkas/csat/internal/tenant"
 	"github.com/ronpinkas/csat/internal/token"
 	"github.com/ronpinkas/csat/internal/web"
 )
 
 // Handlers serves the public survey + branding routes.
 type Handlers struct {
-	db     *sql.DB
-	tmpl   *web.Templates
-	cfg    *config.Config
-	def    *surveydef.Definition
-	secret string
-	secure bool
+	provider tenant.Provider
+	tmpl     *web.Templates
+	cfg      *config.Config
+	def      *surveydef.Definition
+	secret   string
+	secure   bool
 }
 
 // New builds the survey handlers for the given survey definition.
-func New(db *sql.DB, tmpl *web.Templates, cfg *config.Config, def *surveydef.Definition, secret string, secure bool) *Handlers {
-	return &Handlers{db: db, tmpl: tmpl, cfg: cfg, def: def, secret: secret, secure: secure}
+func New(provider tenant.Provider, tmpl *web.Templates, cfg *config.Config, def *surveydef.Definition, secret string, secure bool) *Handlers {
+	return &Handlers{provider: provider, tmpl: tmpl, cfg: cfg, def: def, secret: secret, secure: secure}
 }
 
 type pageBase struct {
@@ -84,12 +85,17 @@ type errData struct {
 
 // Form handles GET /s — validate the token and render the survey.
 func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
-	subject, subjectTime, lang, ok := h.decode(r)
+	subject, subjectTime, lang, ref, ok := h.decode(r)
 	if !ok {
 		h.renderInvalid(w, "en")
 		return
 	}
-	if h.alreadyUsed(subject, subjectTime) {
+	db, err := h.provider.DB(ref)
+	if err != nil {
+		h.renderInvalid(w, lang)
+		return
+	}
+	if h.alreadyUsed(db, subject, subjectTime) {
 		t := stringsFor(lang)
 		h.renderDone(w, lang, t.DoneTitle, t.AlreadyMsg)
 		return
@@ -111,9 +117,14 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 		h.renderInvalid(w, "en")
 		return
 	}
-	subject, subjectTime, lang, ok := h.decode(r)
+	subject, subjectTime, lang, ref, ok := h.decode(r)
 	if !ok {
 		h.renderInvalid(w, "en")
+		return
+	}
+	db, err := h.provider.DB(ref)
+	if err != nil {
+		h.renderInvalid(w, lang)
 		return
 	}
 	t := stringsFor(lang)
@@ -127,7 +138,7 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch h.store(subject, subjectTime, lang, answers) {
+	switch h.store(db, subject, subjectTime, lang, answers) {
 	case storeOK:
 		h.renderDone(w, lang, t.DoneTitle, h.def.ThanksFor(lang))
 	case storeAlreadyUsed:
@@ -166,25 +177,26 @@ func (h *Handlers) questions(lang string) []qView {
 	return out
 }
 
-// decode extracts and validates the token from the request query.
-func (h *Handlers) decode(r *http.Request) (subject string, subjectTime int64, lang string, ok bool) {
+// decode extracts and validates the token from the request query, returning the
+// tenant ref it carries ("" for a single-tenant/legacy token).
+func (h *Handlers) decode(r *http.Request) (subject string, subjectTime int64, lang, ref string, ok bool) {
 	tok := r.URL.Query().Get("t")
 	if tok == "" {
-		return "", 0, "", false
+		return "", 0, "", "", false
 	}
-	subj, ts, lng, err := token.Decrypt(h.secret, tok)
+	subj, ts, lng, rf, err := token.Decrypt(h.secret, tok)
 	if err != nil {
-		return "", 0, "", false
+		return "", 0, "", "", false
 	}
 	if len(subj) == 0 || len(subj) > 128 {
-		return "", 0, "", false
+		return "", 0, "", "", false
 	}
-	return subj, ts, normalizeLang(lng), true
+	return subj, ts, normalizeLang(lng), rf, true
 }
 
-func (h *Handlers) alreadyUsed(subject string, subjectTime int64) bool {
+func (h *Handlers) alreadyUsed(db *sql.DB, subject string, subjectTime int64) bool {
 	var n int
-	err := h.db.QueryRow(
+	err := db.QueryRow(
 		`SELECT COUNT(*) FROM used_tokens WHERE subject = ? AND subject_time = ?`,
 		subject, subjectTime,
 	).Scan(&n)
@@ -201,9 +213,9 @@ const (
 
 // store inserts the response, its answers, and the used-token marker in one
 // transaction. The used_tokens PRIMARY KEY enforces single submission.
-func (h *Handlers) store(subject string, subjectTime int64, lang string, answers []answer) storeResult {
+func (h *Handlers) store(db *sql.DB, subject string, subjectTime int64, lang string, answers []answer) storeResult {
 	now := time.Now().Unix()
-	tx, err := h.db.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		log.Printf("survey: begin tx: %v", err)
 		return storeError

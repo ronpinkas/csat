@@ -14,10 +14,10 @@ import (
 
 	"github.com/ronpinkas/csat/internal/admin"
 	"github.com/ronpinkas/csat/internal/config"
-	"github.com/ronpinkas/csat/internal/db"
 	"github.com/ronpinkas/csat/internal/httpx"
 	"github.com/ronpinkas/csat/internal/survey"
 	"github.com/ronpinkas/csat/internal/surveydef"
+	"github.com/ronpinkas/csat/internal/tenant"
 	"github.com/ronpinkas/csat/internal/token"
 	"github.com/ronpinkas/csat/internal/web"
 )
@@ -34,6 +34,7 @@ func main() {
 	mintTS := flag.Int64("ts", 0, "subject time as unix seconds for -mint")
 	mintBase := flag.String("base", "", "base URL for -mint, e.g. https://csat.example.com")
 	mintLang := flag.String("lang", "en", "language for -mint (en|es)")
+	mintRef := flag.String("ref", "", "tenant ref for -mint (multi-tenant mode; empty = single-tenant)")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
@@ -59,7 +60,7 @@ func main() {
 		if subject == "" {
 			subject = *mintCID
 		}
-		tok, err := token.Encrypt(secret, subject, *mintTS, *mintLang)
+		tok, err := token.Encrypt(secret, subject, *mintTS, *mintLang, *mintRef)
 		if err != nil {
 			log.Fatalf("mint: %v", err)
 		}
@@ -72,14 +73,17 @@ func main() {
 		log.Printf("     %s", secret)
 	}
 
-	database, err := db.Open(cfg.DB.Path)
+	var provider tenant.Provider
+	if cfg.Tenancy.Multi() {
+		provider, err = tenant.NewMulti(cfg.Tenancy.DataDir)
+		log.Printf("multi-tenant mode: one database per ref under %s", cfg.Tenancy.DataDir)
+	} else {
+		provider, err = tenant.NewSingle(cfg.DB.Path)
+	}
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
-	defer database.Close()
-	if err := db.Migrate(database); err != nil {
-		log.Fatalf("migrate: %v", err)
-	}
+	defer provider.Close()
 
 	tmpl, err := web.LoadTemplates(nil)
 	if err != nil {
@@ -98,10 +102,10 @@ func main() {
 		log.Fatalf("static: %v", err)
 	}
 
-	surveyH := survey.New(database, tmpl, cfg, def, secret, secure)
+	surveyH := survey.New(provider, tmpl, cfg, def, secret, secure)
 	surveyRL := httpx.NewLimiter(30, 10).Middleware(cfg.Server.TrustProxy, cfg.Server.TrustedProxies)
 
-	adminH, err := admin.New(database, tmpl, cfg, def, secret, secure)
+	adminH, err := admin.New(provider, tmpl, cfg, def, secret, secure)
 	if err != nil {
 		log.Fatalf("admin: %v", err)
 	}

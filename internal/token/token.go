@@ -45,15 +45,22 @@ func newGCM(secret string) (cipher.AEAD, error) {
 }
 
 // Encrypt builds a token for the given subject (the entity the survey is about —
-// a phone number, order id, ticket id, …), subject time (UTC unix seconds), and
-// language tag (e.g. "en", "es"). The subject and language must not contain the
-// '|' separator; an empty language defaults to "en".
-func Encrypt(secret, subject string, subjectTime int64, lang string) (string, error) {
+// a phone number, order id, ticket id, …), subject time (UTC unix seconds),
+// language tag (e.g. "en", "es"), and tenant ref. The subject, language, and ref
+// must not contain the '|' separator; an empty language defaults to "en".
+//
+// The ref binds the token to a tenant in multi-tenant mode. An empty ref omits
+// the field entirely, producing the historical three-field token — so single-
+// tenant links (and any links already in the wild) are byte-for-byte unchanged.
+func Encrypt(secret, subject string, subjectTime int64, lang, ref string) (string, error) {
 	if strings.Contains(subject, "|") {
 		return "", errors.New("subject must not contain '|'")
 	}
 	if strings.Contains(lang, "|") {
 		return "", errors.New("language must not contain '|'")
+	}
+	if strings.Contains(ref, "|") {
+		return "", errors.New("ref must not contain '|'")
 	}
 	if lang == "" {
 		lang = "en"
@@ -67,34 +74,41 @@ func Encrypt(secret, subject string, subjectTime int64, lang string) (string, er
 		return "", err
 	}
 	pt := subject + "|" + strconv.FormatInt(subjectTime, 10) + "|" + lang
+	if ref != "" {
+		pt += "|" + ref
+	}
 	sealed := gcm.Seal(nonce, nonce, []byte(pt), nil) // result = nonce || ciphertext||tag
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
 
-// Decrypt validates a token and returns the subject, subject time, and language.
-// It returns ErrInvalidToken for anything that does not decrypt to the expected
-// three-field payload.
-func Decrypt(secret, tok string) (subject string, subjectTime int64, lang string, err error) {
+// Decrypt validates a token and returns the subject, subject time, language, and
+// tenant ref. A three-field (legacy/single-tenant) token decrypts with ref="".
+// It returns ErrInvalidToken for anything that does not decrypt to a valid
+// three- or four-field payload.
+func Decrypt(secret, tok string) (subject string, subjectTime int64, lang, ref string, err error) {
 	raw, err := base64.RawURLEncoding.DecodeString(tok)
 	if err != nil || len(raw) < nonceSize {
-		return "", 0, "", ErrInvalidToken
+		return "", 0, "", "", ErrInvalidToken
 	}
 	gcm, err := newGCM(secret)
 	if err != nil {
-		return "", 0, "", err
+		return "", 0, "", "", err
 	}
 	nonce, ciphertext := raw[:nonceSize], raw[nonceSize:]
 	pt, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return "", 0, "", ErrInvalidToken
+		return "", 0, "", "", ErrInvalidToken
 	}
 	parts := strings.Split(string(pt), "|")
-	if len(parts) != 3 || parts[0] == "" {
-		return "", 0, "", ErrInvalidToken
+	if len(parts) < 3 || len(parts) > 4 || parts[0] == "" {
+		return "", 0, "", "", ErrInvalidToken
 	}
 	ts, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return "", 0, "", ErrInvalidToken
+		return "", 0, "", "", ErrInvalidToken
 	}
-	return parts[0], ts, parts[2], nil
+	if len(parts) == 4 {
+		ref = parts[3]
+	}
+	return parts[0], ts, parts[2], ref, nil
 }
