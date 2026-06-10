@@ -22,6 +22,12 @@ choice/multichoice breakdowns, daily trend, and recent comments, over a selectab
 
 ![Admin dashboard](docs/screenshots/dashboard.png)
 
+Built-in **user management** — invite admins or read-only viewers by link, issue a single-use
+password-reset link, deactivate, or delete any account. Self-service reset requests surface here
+as a badge so an admin can act on them:
+
+![User management](docs/screenshots/user-management.png)
+
 The customer survey (here the rich `survey.example.json` — stars, NPS, choice, multichoice,
 scale, text), localized by the link's language token, with a per-deployment logo + theme:
 
