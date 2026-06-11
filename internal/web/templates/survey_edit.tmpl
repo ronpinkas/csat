@@ -14,25 +14,46 @@
 {{if .Error}}<div class="notice err">{{.Error}}</div>{{end}}
 
 <section class="card">
-  <p class="muted">Design your survey below. <strong>Publishing</strong> creates a new question set
-  (id increases); existing sets stay usable and keep their past responses. New survey links use the
-  latest set unless a link names a specific <code>&amp;set=&lt;id&gt;</code>; the dashboard can view
-  any set. Editing set #{{.SetID}}.</p>
+  <p class="muted"><strong>Surveys are immutable once published</strong> — a published survey can't be
+  edited, so its past responses always reflect the questions people actually saw. To make a change,
+  start a <strong>new survey</strong> (blank, or from an existing one as a template). The newest survey
+  becomes the default for new links; older ones stay usable and keep their responses.</p>
+
+  <div class="toolbar">
+    <label>Survey
+      <select id="surveyPicker">
+        {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .Latest}} (latest){{end}}</option>{{end}}
+      </select>
+    </label>
+    <span class="muted">viewing read-only · Set #{{.SetID}}</span>
+  </div>
+
+  <div class="designer-actions" id="browse-actions">
+    <button class="btn ghost" type="button" id="new-from-template">Start new from this template</button>
+    <button class="btn primary" type="button" id="new-blank">New survey</button>
+    <a class="btn ghost" href="/dashboard?set={{.SetID}}">View results</a>
+  </div>
 
   <form method="POST" action="/survey" id="survey-form">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="definition" id="definition-json">
 
+    <div class="form-row" id="name-row" style="display:none">
+      <label for="survey-name">Survey name</label>
+      <input id="survey-name" type="text" placeholder="e.g. NPS — Spring 2026">
+    </div>
+
     <div id="designer"></div>
 
-    <div class="designer-actions">
+    <div class="designer-actions" id="edit-actions" style="display:none">
       <button class="btn ghost" type="button" id="add-question">+ Add question</button>
-      <button class="btn primary" type="submit">Publish as new set</button>
+      <button class="btn primary" type="submit">Publish new survey</button>
+      <button class="btn ghost" type="button" id="cancel-edit">Cancel</button>
     </div>
 
     <details class="advanced">
       <summary>Advanced — raw JSON</summary>
-      <p class="muted">The visual designer is the source of truth on Publish. Edit here and
+      <p class="muted">The visual designer is the source of truth on Publish.
       <button class="btn ghost" type="button" id="load-json">Load into designer</button> to round-trip.</p>
       <textarea id="definition-raw" rows="16" spellcheck="false"
         style="width:100%;font-family:ui-monospace,monospace;font-size:13px">{{.JSON}}</textarea>
@@ -41,14 +62,14 @@
 </section>
 
 <section class="card" style="margin-top:16px">
-  <h3>Published sets</h3>
+  <h3>Published surveys</h3>
   <table>
-    <thead><tr><th>Set</th><th></th><th></th></tr></thead>
+    <thead><tr><th>Survey</th><th></th><th></th></tr></thead>
     <tbody>
       {{range .Sets}}
       <tr>
-        <td>#{{.ID}}{{if .Latest}} · <strong>latest</strong>{{end}}</td>
-        <td><a href="/survey?set={{.ID}}">Open in designer</a></td>
+        <td>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .Latest}} · <strong>latest</strong>{{end}}</td>
+        <td><a href="/survey?set={{.ID}}">View / use as template</a></td>
         <td><a href="/dashboard?set={{.ID}}">View results</a></td>
       </tr>
       {{end}}

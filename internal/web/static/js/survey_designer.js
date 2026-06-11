@@ -13,7 +13,8 @@
   ];
   var LANGS = [["en", "English"], ["es", "Español"]];
 
-  var model = { version: 1, intro: {}, thanks: {}, questions: [] };
+  var model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] };
+  var readOnly = true; // browse a published survey read-only until fork/new
   var designer = document.getElementById("designer");
   var form = document.getElementById("survey-form");
   if (!designer || !form) return;
@@ -72,6 +73,16 @@
       designer.appendChild(questionCard(q, idx));
     });
     syncRaw();
+    applyReadOnly();
+  }
+
+  // In browse mode, disable every control and hide the per-card buttons so the
+  // selected published survey shows read-only (it's immutable; fork to change).
+  function applyReadOnly() {
+    designer.querySelectorAll("input,select,textarea,button").forEach(function (e) {
+      if (e.tagName === "BUTTON") e.style.display = readOnly ? "none" : "";
+      else e.disabled = readOnly;
+    });
   }
 
   function questionCard(q, idx) {
@@ -199,21 +210,59 @@
   function load(jsonText) {
     try {
       var d = JSON.parse(jsonText);
-      model = { version: d.version || 1, intro: d.intro || {}, thanks: d.thanks || {}, questions: d.questions || [] };
-    } catch (e) { model = { version: 1, intro: {}, thanks: {}, questions: [] }; }
+      model = { version: d.version || 1, name: d.name || "", intro: d.intro || {}, thanks: d.thanks || {}, questions: d.questions || [] };
+    } catch (e) { model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] }; }
+    var nm = document.getElementById("survey-name");
+    if (nm) nm.value = model.name;
     render();
   }
 
+  // ---- modes ----
+  function show(id, on) { var e = document.getElementById(id); if (e) e.style.display = on ? "" : "none"; }
+  function enterBrowse() {
+    readOnly = true;
+    show("browse-actions", true); show("edit-actions", false); show("name-row", false);
+    render();
+  }
+  function enterEdit(prefillName) {
+    readOnly = false;
+    var nm = document.getElementById("survey-name");
+    if (nm) { nm.value = prefillName != null ? prefillName : (model.name || ""); model.name = nm.value; }
+    show("browse-actions", false); show("edit-actions", true); show("name-row", true);
+    render();
+  }
+
+  // ---- wire ----
   document.getElementById("add-question").addEventListener("click", function () {
     model.questions.push(blankQuestion()); render();
+  });
+  var nameInput = document.getElementById("survey-name");
+  if (nameInput) nameInput.addEventListener("input", function () { model.name = nameInput.value; });
+  var fromTpl = document.getElementById("new-from-template");
+  if (fromTpl) fromTpl.addEventListener("click", function () {
+    enterEdit(model.name ? "Copy of " + model.name : ""); // reuse the loaded survey as the starting point
+  });
+  var blank = document.getElementById("new-blank");
+  if (blank) blank.addEventListener("click", function () {
+    model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] };
+    enterEdit("");
+  });
+  var cancel = document.getElementById("cancel-edit");
+  if (cancel) cancel.addEventListener("click", function () { window.location.reload(); });
+  var picker = document.getElementById("surveyPicker");
+  if (picker) picker.addEventListener("change", function () {
+    window.location.href = "/survey?set=" + encodeURIComponent(picker.value);
   });
   var loadBtn = document.getElementById("load-json");
   if (loadBtn) loadBtn.addEventListener("click", function () {
     load(document.getElementById("definition-raw").value);
   });
   form.addEventListener("submit", function () {
+    if (nameInput) model.name = nameInput.value;
     document.getElementById("definition-json").value = serialize();
   });
 
+  // ---- init: browse the selected published survey read-only ----
   load(document.getElementById("definition-raw").value);
+  enterBrowse();
 })();

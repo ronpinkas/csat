@@ -22,6 +22,7 @@ var ErrNoDefinition = errors.New("no survey definition")
 type Version struct {
 	ID        int64
 	CreatedAt int64
+	Name      string
 	Latest    bool
 }
 
@@ -59,7 +60,7 @@ func ByID(db *sql.DB, id int64) (*surveydef.Definition, error) {
 
 // List returns set metadata, newest first; the first entry is the latest.
 func List(db *sql.DB) ([]Version, error) {
-	rows, err := db.Query(`SELECT id, created_at FROM survey_definitions ORDER BY id DESC`)
+	rows, err := db.Query(`SELECT id, created_at, name FROM survey_definitions ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +68,7 @@ func List(db *sql.DB) ([]Version, error) {
 	var out []Version
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.ID, &v.CreatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.CreatedAt, &v.Name); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -86,7 +87,7 @@ func Add(db *sql.DB, def *surveydef.Definition, now int64) (int64, error) {
 		return 0, err
 	}
 	res, err := db.Exec(
-		`INSERT INTO survey_definitions(json, created_at) VALUES(?, ?)`, string(js), now)
+		`INSERT INTO survey_definitions(json, created_at, name) VALUES(?, ?, ?)`, string(js), now, def.Name)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +118,7 @@ func Seed(db *sql.DB, def *surveydef.Definition, now int64) (int64, error) {
 	}
 	defer tx.Rollback()
 	res, err := tx.Exec(
-		`INSERT INTO survey_definitions(json, created_at) VALUES(?, ?)`, string(js), now)
+		`INSERT INTO survey_definitions(json, created_at, name) VALUES(?, ?, ?)`, string(js), now, def.Name)
 	if err != nil {
 		return 0, err
 	}

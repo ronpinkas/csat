@@ -28,6 +28,7 @@ var defaultJSON []byte
 // Definition is a complete survey.
 type Definition struct {
 	Version   int               `json:"version"`
+	Name      string            `json:"name"`   // human label for the multi-survey picker (optional)
 	Intro     map[string]string `json:"intro"`  // lang -> text
 	Thanks    map[string]string `json:"thanks"` // lang -> text
 	Questions []Question        `json:"questions"`

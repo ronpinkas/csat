@@ -85,7 +85,7 @@ func TestSurveyEditorPublishesNewSet(t *testing.T) {
 
 	// The editor (visual designer) renders.
 	_, page := getBody(t, admin, srv.URL+"/survey")
-	if !strings.Contains(page, "Publish as new set") {
+	if !strings.Contains(page, "Publish new survey") {
 		t.Fatalf("survey editor missing: %s", first(page, 300))
 	}
 
