@@ -23,7 +23,8 @@ type Version struct {
 	ID        int64
 	CreatedAt int64
 	Name      string
-	Latest    bool
+	Latest    bool // newest by id
+	IsDefault bool // the effective default (pinned set, else newest)
 }
 
 // Latest returns the newest set and its id (the default for blank survey links).
@@ -45,6 +46,43 @@ func Latest(db *sql.DB) (*surveydef.Definition, int64, error) {
 	return d, id, err
 }
 
+// Default returns the effective default set: the explicitly pinned one
+// (is_default=1) if any, otherwise the newest. This is what blank links and the
+// form/dashboard resolve to.
+func Default(db *sql.DB) (*surveydef.Definition, int64, error) {
+	var (
+		id int64
+		js string
+	)
+	err := db.QueryRow(
+		`SELECT id, json FROM survey_definitions WHERE is_default = 1 ORDER BY id DESC LIMIT 1`,
+	).Scan(&id, &js)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Latest(db) // nothing pinned -> newest
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	d, err := surveydef.Parse([]byte(js))
+	return d, id, err
+}
+
+// SetDefault pins one set as the default, clearing any previous pin.
+func SetDefault(db *sql.DB, id int64) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE survey_definitions SET is_default = 0 WHERE is_default = 1`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE survey_definitions SET is_default = 1 WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ByID returns the set for a specific id.
 func ByID(db *sql.DB, id int64) (*surveydef.Definition, error) {
 	var js string
@@ -60,23 +98,39 @@ func ByID(db *sql.DB, id int64) (*surveydef.Definition, error) {
 
 // List returns set metadata, newest first; the first entry is the latest.
 func List(db *sql.DB) ([]Version, error) {
-	rows, err := db.Query(`SELECT id, created_at, name FROM survey_definitions ORDER BY id DESC`)
+	rows, err := db.Query(`SELECT id, created_at, name, is_default FROM survey_definitions ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []Version
+	var pinnedID int64
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.ID, &v.CreatedAt, &v.Name); err != nil {
+		var pinned int
+		if err := rows.Scan(&v.ID, &v.CreatedAt, &v.Name, &pinned); err != nil {
 			return nil, err
+		}
+		if pinned != 0 {
+			pinnedID = v.ID
 		}
 		out = append(out, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	if len(out) > 0 {
 		out[0].Latest = true
+		// Effective default: the pinned set, else the newest.
+		defaultID := pinnedID
+		if defaultID == 0 {
+			defaultID = out[0].ID
+		}
+		for i := range out {
+			out[i].IsDefault = out[i].ID == defaultID
+		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // Add validates def and stores it as a new set, returning its id. The new set
@@ -137,7 +191,7 @@ func Seed(db *sql.DB, def *surveydef.Definition, now int64) (int64, error) {
 // tenant has none yet (so any access path — survey or admin — converges to a
 // stored, backfilled set).
 func Resolve(db *sql.DB, fallback *surveydef.Definition, now int64) (*surveydef.Definition, int64, error) {
-	d, id, err := Latest(db)
+	d, id, err := Default(db)
 	if errors.Is(err, ErrNoDefinition) {
 		id, serr := Seed(db, fallback, now)
 		if serr != nil {

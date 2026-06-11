@@ -22,7 +22,7 @@
   <div class="toolbar">
     <label>Survey
       <select id="surveyPicker">
-        {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .Latest}} (latest){{end}}</option>{{end}}
+        {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .IsDefault}} (default){{end}}</option>{{end}}
       </select>
     </label>
     <span class="muted">viewing read-only · Set #{{.SetID}}</span>
@@ -47,6 +47,7 @@
 
     <div class="designer-actions" id="edit-actions" style="display:none">
       <button class="btn ghost" type="button" id="add-question">+ Add question</button>
+      <label class="inline-check"><input type="checkbox" name="set_default" id="set-default"> Set as default</label>
       <button class="btn primary" type="submit">Publish new survey</button>
       <button class="btn ghost" type="button" id="cancel-edit">Cancel</button>
     </div>
@@ -68,7 +69,7 @@
     <tbody>
       {{range .Sets}}
       <tr>
-        <td>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .Latest}} · <strong>latest</strong>{{end}}</td>
+        <td>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .IsDefault}} · <strong>default</strong>{{end}}</td>
         <td><a href="/survey?set={{.ID}}">View / use as template</a></td>
         <td><a href="/dashboard?set={{.ID}}">View results</a></td>
       </tr>

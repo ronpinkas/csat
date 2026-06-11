@@ -102,3 +102,45 @@ func TestResolveSeedsWhenEmpty(t *testing.T) {
 		t.Fatal("resolve should have left a latest set")
 	}
 }
+
+// TestSetDefaultPinsAndStays: pinning makes an explicit default; it overrides
+// "newest" and STAYS put when a newer survey is later published (the whole point
+// of an explicit default). With nothing pinned, default == newest (back-compat).
+func TestSetDefaultPinsAndStays(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	if err := db.Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+
+	id1, _ := Add(database, surveydef.Default(), 1000)
+	id2, _ := Add(database, surveydef.Default(), 2000)
+
+	// No pin: default is the newest (Curaçao's single-survey behavior generalizes).
+	if _, id, _ := Default(database); id != id2 {
+		t.Fatalf("default with no pin = %d, want newest %d", id, id2)
+	}
+
+	// Pin the older one; Default + List both reflect it.
+	if err := SetDefault(database, id1); err != nil {
+		t.Fatal(err)
+	}
+	if _, id, _ := Default(database); id != id1 {
+		t.Fatalf("default after pin = %d, want %d", id, id1)
+	}
+	vs, _ := List(database)
+	for _, v := range vs {
+		if v.IsDefault != (v.ID == id1) {
+			t.Fatalf("IsDefault wrong for set %d: got %v", v.ID, v.IsDefault)
+		}
+	}
+
+	// Publishing a newer survey does NOT steal the pin.
+	id3, _ := Add(database, surveydef.Default(), 3000)
+	if _, id, _ := Default(database); id != id1 {
+		t.Fatalf("default after publishing newer = %d, want pinned %d (not %d)", id, id1, id3)
+	}
+}

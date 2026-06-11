@@ -20,7 +20,7 @@
   {{if .Sets}}
   <label>Survey
     <select id="setSelect">
-      {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .Latest}} (latest){{end}}</option>{{end}}
+      {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .IsDefault}} (default){{end}}</option>{{end}}
     </select>
   </label>
   {{end}}

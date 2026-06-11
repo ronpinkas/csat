@@ -51,9 +51,17 @@ func (a *Admin) surveyPublish(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if _, err := defstore.Add(db, def, time.Now().Unix()); err != nil {
+	id, err := defstore.Add(db, def, time.Now().Unix())
+	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	// Optional: pin the just-published survey as the default (the checkbox by Publish).
+	if r.PostFormValue("set_default") != "" {
+		if err := defstore.SetDefault(db, id); err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 	http.Redirect(w, r, "/survey", http.StatusSeeOther)
 }
