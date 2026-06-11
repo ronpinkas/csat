@@ -126,10 +126,15 @@ func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 // when valid, otherwise the latest set (seeded on first touch).
 func (h *Handlers) resolveFormDef(db *sql.DB, r *http.Request) (*surveydef.Definition, int64, error) {
 	if s := r.URL.Query().Get("set"); s != "" {
+		// Numeric -> an exact set id; otherwise treat it as a survey NAME and
+		// follow the newest set with that name (so a phone's CSAT Survey targets
+		// the current version even after re-publishing). Either miss -> default.
 		if id, err := strconv.ParseInt(s, 10, 64); err == nil {
 			if d, derr := defstore.ByID(db, id); derr == nil {
 				return d, id, nil
 			}
+		} else if d, id, derr := defstore.ByName(db, s); derr == nil {
+			return d, id, nil
 		}
 	}
 	return defstore.Resolve(db, h.def, time.Now().Unix())

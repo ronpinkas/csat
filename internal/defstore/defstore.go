@@ -96,6 +96,28 @@ func ByID(db *sql.DB, id int64) (*surveydef.Definition, error) {
 	return surveydef.Parse([]byte(js))
 }
 
+// ByName returns the NEWEST set whose name matches (case-insensitive). A link
+// can target a survey by its human name and automatically follow re-publishes
+// (a new version with the same name supersedes). ErrNoDefinition if no match.
+func ByName(db *sql.DB, name string) (*surveydef.Definition, int64, error) {
+	var (
+		id int64
+		js string
+	)
+	err := db.QueryRow(
+		`SELECT id, json FROM survey_definitions WHERE name = ? COLLATE NOCASE ORDER BY id DESC LIMIT 1`,
+		name,
+	).Scan(&id, &js)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, 0, ErrNoDefinition
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	d, err := surveydef.Parse([]byte(js))
+	return d, id, err
+}
+
 // List returns set metadata, newest first; the first entry is the latest.
 func List(db *sql.DB) ([]Version, error) {
 	rows, err := db.Query(`SELECT id, created_at, name, is_default FROM survey_definitions ORDER BY id DESC`)

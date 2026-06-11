@@ -144,3 +144,36 @@ func TestSetDefaultPinsAndStays(t *testing.T) {
 		t.Fatalf("default after publishing newer = %d, want pinned %d (not %d)", id, id1, id3)
 	}
 }
+
+// TestByNameFollowsLatest: ByName resolves a survey by its human name
+// (case-insensitive) to the NEWEST set with that name, so a name reference
+// follows re-publishes. An unknown name errors (callers fall back to default).
+func TestByNameFollowsLatest(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	if err := db.Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+
+	d1 := surveydef.Default()
+	d1.Name = "Air Fryer Survey"
+	Add(database, d1, 1000)
+	d2 := surveydef.Default()
+	d2.Name = "Air Fryer Survey" // re-published, same name -> supersedes
+	id2, _ := Add(database, d2, 2000)
+	other := surveydef.Default()
+	other.Name = "NPS"
+	Add(database, other, 3000)
+
+	// Case-insensitive match resolves to the newest set with that name.
+	if _, id, err := ByName(database, "air fryer survey"); err != nil || id != id2 {
+		t.Fatalf("ByName -> id=%d err=%v, want newest %d", id, err, id2)
+	}
+	// Unknown name errors -> caller (resolveFormDef) falls back to the default.
+	if _, _, err := ByName(database, "no-such-survey"); err == nil {
+		t.Fatal("unknown name should error so the form falls back to default")
+	}
+}
