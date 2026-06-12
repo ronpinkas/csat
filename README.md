@@ -207,14 +207,16 @@ pre-existing responses are backfilled to it. After that the database is the sour
 ported, the seed file is renamed to `survey.json.ported` (single-tenant, best-effort) and may be
 removed — a missing seed file is not an error.
 
-**Versioning.** Editing publishes a *new* set (id increases); older sets are never mutated, stay
-mintable, and keep their responses. Each response records the set it was answered under, so
+**Versioning, names & default.** Editing publishes a *new* set (id increases); older sets are never
+mutated, stay mintable, and keep their responses. Sets can be **named**, and one can be **pinned as
+the default** (the "Set as default" box when publishing) — blank links and the dashboard then use it
+instead of the implicit newest set. Each response records the set it was answered under, so
 analytics are always coherent:
 
-- **Survey links** default to the latest set, or name one: `/s?t=<token>&set=<id>` (mint with
-  `--set`, or just append `&set=`).
-- **Dashboard** shows a *Question set* selector (default = latest); analytics and CSV are scoped to
-  the selected set.
+- **Survey links** use the pinned default set (or the newest if none is pinned), or name one
+  explicitly: `/s?t=<token>&set=<id>` (mint with `--set`, or just append `&set=`).
+- **Dashboard** shows a *Question set* selector (default = the pinned/newest set); analytics and CSV
+  are scoped to the selected set.
 
 Each question has a `key`, a `type`, per-language `label`s, and `required`:
 
