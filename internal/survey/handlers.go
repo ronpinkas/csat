@@ -5,9 +5,11 @@ package survey
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -59,11 +61,18 @@ type qView struct {
 	Options     []optView
 	MaxLen      int
 	Placeholder string
+	Value       string // prefilled/default value (all types)
+	Widget      string // choice: "select" -> dropdown
+	Locked      bool   // render read-only (only when a prefill value is present)
+	IsSection   bool   // display-only heading
+	ShowIfKey   string // controlling question key ("" if unconditional)
+	ShowIfVals  string // JSON-encoded list of matching values, for the data attribute
 }
 
 type optView struct {
-	Value string
-	Label string
+	Value    string
+	Label    string
+	Selected bool
 }
 
 type surveyData struct {
@@ -118,7 +127,7 @@ func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 		SetID:     setID,
 		Intro:     def.IntroFor(lang),
 		Submit:    t.Submit,
-		Questions: h.questions(def, lang),
+		Questions: h.questions(def, lang, r.URL.Query()),
 	})
 }
 
@@ -179,10 +188,15 @@ func (h *Handlers) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// questions builds the localized render models for the form.
-func (h *Handlers) questions(def *surveydef.Definition, lang string) []qView {
+// questions builds the localized render models for the form. query carries the
+// request URL parameters, used to resolve per-question URL prefills.
+func (h *Handlers) questions(def *surveydef.Definition, lang string, query url.Values) []qView {
 	out := make([]qView, 0, len(def.Questions))
 	for _, q := range def.Questions {
+		if q.Type == surveydef.TypeSection {
+			out = append(out, qView{Key: q.Key, Type: q.Type, Label: q.LabelFor(lang), IsSection: true})
+			continue
+		}
 		v := qView{
 			Key:         q.Key,
 			Type:        q.Type,
@@ -192,7 +206,27 @@ func (h *Handlers) questions(def *surveydef.Definition, lang string) []qView {
 			EndHigh:     q.EndHigh(lang),
 			MaxLen:      q.MaxLen,
 			Placeholder: q.PlaceholderFor(lang),
+			Widget:      q.Widget,
 		}
+		if q.ShowIf != nil {
+			v.ShowIfKey = q.ShowIf.Key
+			if b, err := json.Marshal(q.ShowIf.In); err == nil {
+				v.ShowIfVals = string(b)
+			}
+		}
+		// Resolve the prefill: a URL param (if named + present) overrides the
+		// static default; discard anything invalid for the question type.
+		pv := q.Default
+		if q.PrefillParam != "" {
+			if p := strings.TrimSpace(query.Get(q.PrefillParam)); p != "" {
+				pv = p
+			}
+		}
+		if pv != "" && !q.AcceptsValue(pv) {
+			pv = ""
+		}
+		v.Value = pv
+		v.Locked = q.Locked && pv != "" // lock only when there's a value to lock to
 		switch q.Type {
 		case surveydef.TypeStars:
 			v.Stars = descend(q.Max)
@@ -200,7 +234,11 @@ func (h *Handlers) questions(def *surveydef.Definition, lang string) []qView {
 			v.Scale = q.Scale()
 		case surveydef.TypeChoice, surveydef.TypeMultiChoice:
 			for _, o := range q.Options {
-				v.Options = append(v.Options, optView{Value: o.Value, Label: o.LabelFor(lang)})
+				v.Options = append(v.Options, optView{
+					Value:    o.Value,
+					Label:    o.LabelFor(lang),
+					Selected: pv != "" && o.Value == pv,
+				})
 			}
 		}
 		out = append(out, v)

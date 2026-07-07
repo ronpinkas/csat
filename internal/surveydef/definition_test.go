@@ -50,12 +50,53 @@ func TestValidationErrors(t *testing.T) {
 		`{"questions":[{"key":"a","type":"bogus","label":{"en":"x"}}]}`,                                             // bad type
 		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"}}]}`,                                            // choice w/o options
 		`{"questions":[{"key":"a","type":"text","label":{}}]}`,                                                      // missing label
-		`{"questions":[{"key":"a","type":"text","label":{"en":"x"}},{"key":"a","type":"text","label":{"en":"y"}}]}`, // dup key
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"}},{"key":"a","type":"text","label":{"en":"y"}}]}`,                       // dup key
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"b","in":["y"]}},{"key":"b","type":"text","label":{"en":"y"}}]}`, // show_if forward reference
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"missing","in":["y"]}}]}`,                              // show_if unknown key
+		`{"questions":[{"key":"a","type":"stars","label":{"en":"x"},"widget":"select"}]}`,                                                 // widget on non-choice
+		`{"questions":[{"key":"a","type":"number","min":5,"max":2,"label":{"en":"x"}}]}`,                                                  // number max<min
+		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}],"default":"nope"}]}`, // invalid default
+		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}]},{"key":"b","type":"text","label":{"en":"y"},"show_if":{"key":"a","in":["maybe"]}}]}`, // show_if value not an option
 	}
 	for i, c := range cases {
 		if _, err := parse([]byte(c)); err == nil {
 			t.Fatalf("case %d: expected validation error", i)
 		}
+	}
+}
+
+func TestShowIfAndNewTypes(t *testing.T) {
+	d, err := parse([]byte(`{"questions":[
+		{"key":"sec","type":"section","label":{"en":"Section"}},
+		{"key":"gate","type":"choice","label":{"en":"G"},"options":[{"value":"yes","label":{"en":"Y"}},{"value":"no","label":{"en":"N"}}]},
+		{"key":"follow","type":"text","label":{"en":"F"},"show_if":{"key":"gate","in":["yes"]}},
+		{"key":"store","type":"choice","widget":"select","label":{"en":"S"},"options":[{"value":"1","label":{"en":"One"}}]},
+		{"key":"hours","type":"number","min":0,"max":80,"label":{"en":"H"}},
+		{"key":"day","type":"date","label":{"en":"D"}}
+	]}`))
+	if err != nil {
+		t.Fatalf("valid definition rejected: %v", err)
+	}
+	if d.Questions[2].ShowIf == nil || d.Questions[2].ShowIf.Key != "gate" {
+		t.Fatalf("show_if not parsed: %+v", d.Questions[2])
+	}
+	if d.Questions[3].Widget != "select" {
+		t.Fatalf("widget not parsed: %+v", d.Questions[3])
+	}
+}
+
+func TestAcceptsValue(t *testing.T) {
+	num := Question{Type: TypeNumber, Min: 0, Max: 80}
+	if !num.AcceptsValue("40") || num.AcceptsValue("999") || num.AcceptsValue("x") {
+		t.Fatal("number AcceptsValue wrong")
+	}
+	date := Question{Type: TypeDate}
+	if !date.AcceptsValue("2026-01-15") || date.AcceptsValue("nope") {
+		t.Fatal("date AcceptsValue wrong")
+	}
+	ch := Question{Type: TypeChoice, Options: []Option{{Value: "yes"}}}
+	if !ch.AcceptsValue("yes") || ch.AcceptsValue("no") {
+		t.Fatal("choice AcceptsValue wrong")
 	}
 }
 

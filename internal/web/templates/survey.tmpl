@@ -10,14 +10,17 @@
     <input type="hidden" name="set" value="{{.SetID}}">
 
     {{range $q := .Questions}}
-    <fieldset class="field">
+    {{if $q.IsSection}}
+    <h2 class="section-head">{{$q.Label}}</h2>
+    {{else}}
+    <fieldset class="field"{{if $q.ShowIfKey}} data-showif-key="{{$q.ShowIfKey}}" data-showif-vals="{{$q.ShowIfVals}}" hidden{{end}}>
       <legend>{{$q.Label}}</legend>
 
       {{if eq $q.Type "stars"}}
       <div class="stars" role="radiogroup" aria-label="{{$q.Label}}">
         {{range $v := $q.Stars}}
         <label class="star">
-          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if $q.Required}}required{{end}}>
+          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if eq (printf "%d" $v) $q.Value}}checked{{end}} {{if $q.Required}}required{{end}}>
           <span aria-hidden="true">★</span>
           <span class="sr-only">{{$v}}</span>
         </label>
@@ -28,7 +31,7 @@
       <div class="scale" role="radiogroup" aria-label="{{$q.Label}}">
         {{range $v := $q.Scale}}
         <label class="scale-pt">
-          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if $q.Required}}required{{end}}>
+          <input type="radio" name="{{$q.Key}}" value="{{$v}}" {{if eq (printf "%d" $v) $q.Value}}checked{{end}} {{if $q.Required}}required{{end}}>
           <span>{{$v}}</span>
         </label>
         {{end}}
@@ -36,26 +39,56 @@
       {{if or $q.EndLow $q.EndHigh}}<div class="scale-ends"><span>{{$q.EndLow}}</span><span>{{$q.EndHigh}}</span></div>{{end}}
 
       {{else if eq $q.Type "choice"}}
+      {{if eq $q.Widget "select"}}
+      {{if $q.Locked}}
+      <select class="select" disabled>
+        {{range $o := $q.Options}}<option value="{{$o.Value}}" {{if $o.Selected}}selected{{end}}>{{$o.Label}}</option>{{end}}
+      </select>
+      <input type="hidden" name="{{$q.Key}}" value="{{$q.Value}}">
+      {{else}}
+      <select class="select" name="{{$q.Key}}" {{if $q.Required}}required{{end}}>
+        <option value="">—</option>
+        {{range $o := $q.Options}}<option value="{{$o.Value}}" {{if $o.Selected}}selected{{end}}>{{$o.Label}}</option>{{end}}
+      </select>
+      {{end}}
+      {{else}}
       <div class="choices">
         {{range $o := $q.Options}}
-        <label class="choice"><input type="radio" name="{{$q.Key}}" value="{{$o.Value}}" {{if $q.Required}}required{{end}}> {{$o.Label}}</label>
+        <label class="choice"><input type="radio" name="{{$q.Key}}" value="{{$o.Value}}" {{if $o.Selected}}checked{{end}} {{if $q.Locked}}disabled{{end}} {{if $q.Required}}required{{end}}> {{$o.Label}}</label>
         {{end}}
       </div>
+      {{if $q.Locked}}<input type="hidden" name="{{$q.Key}}" value="{{$q.Value}}">{{end}}
+      {{end}}
 
       {{else if eq $q.Type "multichoice"}}
       <div class="choices">
         {{range $o := $q.Options}}
-        <label class="choice"><input type="checkbox" name="{{$q.Key}}" value="{{$o.Value}}"> {{$o.Label}}</label>
+        <label class="choice"><input type="checkbox" name="{{$q.Key}}" value="{{$o.Value}}" {{if $o.Selected}}checked{{end}} {{if $q.Locked}}disabled{{end}}> {{$o.Label}}</label>
         {{end}}
       </div>
+      {{if $q.Locked}}{{range $o := $q.Options}}{{if $o.Selected}}<input type="hidden" name="{{$q.Key}}" value="{{$o.Value}}">{{end}}{{end}}{{end}}
+
+      {{else if eq $q.Type "number"}}
+      <input type="number" class="input" name="{{$q.Key}}" value="{{$q.Value}}" {{if $q.Locked}}readonly{{end}} {{if $q.Required}}required{{end}}>
+
+      {{else if eq $q.Type "date"}}
+      <input type="date" class="input" name="{{$q.Key}}" value="{{$q.Value}}" {{if $q.Locked}}readonly{{end}} {{if $q.Required}}required{{end}}>
 
       {{else if eq $q.Type "text"}}
-      <textarea name="{{$q.Key}}" rows="3" {{if $q.MaxLen}}maxlength="{{$q.MaxLen}}"{{end}} placeholder="{{$q.Placeholder}}" {{if $q.Required}}required{{end}}></textarea>
+      {{if $q.Locked}}
+      <input type="text" class="input" name="{{$q.Key}}" value="{{$q.Value}}" {{if $q.MaxLen}}maxlength="{{$q.MaxLen}}"{{end}} readonly {{if $q.Required}}required{{end}}>
+      {{else}}
+      <textarea name="{{$q.Key}}" rows="3" {{if $q.MaxLen}}maxlength="{{$q.MaxLen}}"{{end}} placeholder="{{$q.Placeholder}}" {{if $q.Required}}required{{end}}>{{$q.Value}}</textarea>
+      {{end}}
       {{end}}
     </fieldset>
+    {{end}}
     {{end}}
 
     <button type="submit" class="btn primary">{{.Submit}}</button>
   </form>
 </section>
+{{end}}
+{{define "scripts"}}
+<script src="{{asset "/static/js/survey.js"}}"></script>
 {{end}}

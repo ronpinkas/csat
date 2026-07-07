@@ -22,7 +22,7 @@ html, body {
 }
 
 .container {
-  max-width: 560px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
@@ -83,6 +83,27 @@ textarea {
   width: 100%; border: 1px solid var(--line); border-radius: 10px;
   padding: .7rem; font: inherit; resize: vertical;
 }
+
+/* Section heading between question groups */
+.section-head {
+  font-size: 1.05rem; font-weight: 700; color: var(--brand);
+  margin: 1.75rem 0 1rem; padding-bottom: .35rem;
+  border-bottom: 1px solid var(--line);
+}
+.section-head:first-of-type { margin-top: .5rem; }
+
+/* Dropdown (choice widget=select) + number/date inputs */
+.select, .input {
+  width: 100%; border: 1px solid var(--line); border-radius: 10px;
+  padding: .7rem; font: inherit; background: #fff;
+}
+.input[type="number"], .input[type="date"] { max-width: 16rem; }
+
+/* Read-only / locked (prefilled) fields */
+.input[readonly], textarea[readonly], .select:disabled {
+  background: #f3f4f6; color: #4b5563; cursor: not-allowed;
+}
+.choice:has(input:disabled) { opacity: .7; cursor: not-allowed; }
 
 .btn {
   display: inline-block; border: 0; border-radius: 10px;

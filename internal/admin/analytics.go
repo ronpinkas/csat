@@ -76,6 +76,9 @@ func computeAnalytics(db *sql.DB, def *surveydef.Definition, defID, from, to int
 	}
 
 	for _, q := range def.Questions {
+		if q.Type == surveydef.TypeSection {
+			continue // display-only heading, nothing to aggregate
+		}
 		s := QStat{Key: q.Key, Type: q.Type, Label: q.LabelFor("en"), Min: q.Min, Max: q.Max}
 		var err error
 		switch q.Type {
@@ -83,7 +86,7 @@ func computeAnalytics(db *sql.DB, def *surveydef.Definition, defID, from, to int
 			err = fillNumeric(db, &s, q, defID, from, to, loc)
 		case surveydef.TypeChoice, surveydef.TypeMultiChoice:
 			err = fillBreakdown(db, &s, q, defID, from, to)
-		case surveydef.TypeText:
+		case surveydef.TypeText, surveydef.TypeNumber, surveydef.TypeDate:
 			err = db.QueryRow(
 				`SELECT COUNT(*) FROM answers a JOIN responses r ON a.response_id = r.id
 				 WHERE a.question_key = ? AND a.text IS NOT NULL AND a.text <> '' AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`,

@@ -10,6 +10,9 @@
     ["choice", "Single choice"],
     ["multichoice", "Multiple choice"],
     ["text", "Free text"],
+    ["number", "Number"],
+    ["date", "Date"],
+    ["section", "Section heading"],
   ];
   var LANGS = [["en", "English"], ["es", "Español"]];
 
