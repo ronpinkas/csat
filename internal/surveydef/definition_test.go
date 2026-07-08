@@ -44,19 +44,33 @@ func TestNormalizeDefaults(t *testing.T) {
 }
 
 func TestValidationErrors(t *testing.T) {
+	// Each case is a definition that must fail validation. The comment on the
+	// preceding line names what it exercises.
 	cases := []string{
-		`{"questions":[]}`, // no questions
-		`{"questions":[{"key":"Bad Key","type":"text","label":{"en":"x"}}]}`,                                        // bad key
-		`{"questions":[{"key":"a","type":"bogus","label":{"en":"x"}}]}`,                                             // bad type
-		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"}}]}`,                                            // choice w/o options
-		`{"questions":[{"key":"a","type":"text","label":{}}]}`,                                                      // missing label
-		`{"questions":[{"key":"a","type":"text","label":{"en":"x"}},{"key":"a","type":"text","label":{"en":"y"}}]}`,                       // dup key
-		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"b","in":["y"]}},{"key":"b","type":"text","label":{"en":"y"}}]}`, // show_if forward reference
-		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"missing","in":["y"]}}]}`,                              // show_if unknown key
-		`{"questions":[{"key":"a","type":"stars","label":{"en":"x"},"widget":"select"}]}`,                                                 // widget on non-choice
-		`{"questions":[{"key":"a","type":"number","min":5,"max":2,"label":{"en":"x"}}]}`,                                                  // number max<min
-		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}],"default":"nope"}]}`, // invalid default
-		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}]},{"key":"b","type":"text","label":{"en":"y"},"show_if":{"key":"a","in":["maybe"]}}]}`, // show_if value not an option
+		// no questions
+		`{"questions":[]}`,
+		// invalid key
+		`{"questions":[{"key":"Bad Key","type":"text","label":{"en":"x"}}]}`,
+		// unknown type
+		`{"questions":[{"key":"a","type":"bogus","label":{"en":"x"}}]}`,
+		// choice without options
+		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"}}]}`,
+		// missing label
+		`{"questions":[{"key":"a","type":"text","label":{}}]}`,
+		// duplicate key
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"}},{"key":"a","type":"text","label":{"en":"y"}}]}`,
+		// show_if forward reference
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"b","in":["y"]}},{"key":"b","type":"text","label":{"en":"y"}}]}`,
+		// show_if unknown key
+		`{"questions":[{"key":"a","type":"text","label":{"en":"x"},"show_if":{"key":"missing","in":["y"]}}]}`,
+		// widget on non-choice
+		`{"questions":[{"key":"a","type":"stars","label":{"en":"x"},"widget":"select"}]}`,
+		// number max < min
+		`{"questions":[{"key":"a","type":"number","min":5,"max":2,"label":{"en":"x"}}]}`,
+		// invalid default
+		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}],"default":"nope"}]}`,
+		// show_if value not an option
+		`{"questions":[{"key":"a","type":"choice","label":{"en":"x"},"options":[{"value":"yes","label":{"en":"Y"}}]},{"key":"b","type":"text","label":{"en":"y"},"show_if":{"key":"a","in":["maybe"]}}]}`,
 	}
 	for i, c := range cases {
 		if _, err := parse([]byte(c)); err == nil {
