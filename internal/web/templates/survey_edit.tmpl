@@ -32,6 +32,20 @@
     <button class="btn ghost" type="button" id="new-from-template">Start new from this template</button>
     <button class="btn primary" type="button" id="new-blank">New survey</button>
     <a class="btn ghost" href="/dashboard?set={{.SetID}}">View results</a>
+    {{if not .CurrentIsDefault}}
+    <form method="POST" action="/survey/default" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="set" value="{{.SetID}}">
+      <button class="btn ghost" type="submit">Set survey as default</button>
+    </form>
+    {{end}}
+    {{if and (not .CurrentIsDefault) (gt .SetCount 1)}}
+    <form method="POST" action="/survey/delete" class="inline" id="delete-survey-form">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="set" value="{{.SetID}}">
+      <button class="btn ghost danger" type="submit">Delete survey</button>
+    </form>
+    {{end}}
   </div>
 
   <form method="POST" action="/survey" id="survey-form">

@@ -209,6 +209,46 @@ func Seed(db *sql.DB, def *surveydef.Definition, now int64) (int64, error) {
 	return id, nil
 }
 
+// Count returns the number of stored sets.
+func Count(db *sql.DB) (int, error) {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM survey_definitions`).Scan(&n)
+	return n, err
+}
+
+// Delete removes a set and everything answered under it — its responses, their
+// answers, and the used-token markers — in one transaction. Callers MUST enforce
+// policy first (never delete the effective default or the last remaining set).
+// Deletes are explicit (not relying on PRAGMA foreign_keys) and idempotent.
+// Returns the number of responses removed.
+func Delete(db *sql.DB, id int64) (int64, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	sub := `(SELECT id FROM responses WHERE definition_id = ?)`
+	if _, err := tx.Exec(`DELETE FROM answers WHERE response_id IN `+sub, id); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`DELETE FROM used_tokens WHERE response_id IN `+sub, id); err != nil {
+		return 0, err
+	}
+	res, err := tx.Exec(`DELETE FROM responses WHERE definition_id = ?`, id)
+	if err != nil {
+		return 0, err
+	}
+	removed, _ := res.RowsAffected()
+	if _, err := tx.Exec(`DELETE FROM survey_definitions WHERE id = ?`, id); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return removed, nil
+}
+
 // Resolve returns the latest set, seeding fallback as the first set if the
 // tenant has none yet (so any access path — survey or admin — converges to a
 // stored, backfilled set).

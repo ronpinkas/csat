@@ -44,6 +44,8 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	mux.Handle("POST /settings", a.adminCSRF(a.saveSettings))
 	mux.Handle("GET /survey", a.adminOnly(a.surveyEditor))
 	mux.Handle("POST /survey", a.adminCSRF(a.surveyPublish))
+	mux.Handle("POST /survey/default", a.adminCSRF(a.surveySetDefault))
+	mux.Handle("POST /survey/delete", a.adminCSRF(a.surveyDelete))
 	mux.Handle("GET /users", a.adminOnly(a.usersPage))
 	mux.Handle("POST /users/invite", a.adminCSRF(a.createInvite))
 	mux.Handle("POST /users/deactivate", a.adminCSRF(a.deactivate))

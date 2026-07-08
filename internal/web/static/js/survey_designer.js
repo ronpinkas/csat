@@ -265,6 +265,14 @@
     document.getElementById("definition-json").value = serialize();
   });
 
+  // Confirm before deleting a survey (destructive: also removes its responses).
+  var delForm = document.getElementById("delete-survey-form");
+  if (delForm) delForm.addEventListener("submit", function (e) {
+    if (!window.confirm("Delete this survey and ALL of its collected responses? This cannot be undone.")) {
+      e.preventDefault();
+    }
+  });
+
   // ---- init: browse the selected published survey read-only ----
   load(document.getElementById("definition-raw").value);
   enterBrowse();

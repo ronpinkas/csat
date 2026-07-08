@@ -177,3 +177,71 @@ func TestByNameFollowsLatest(t *testing.T) {
 		t.Fatal("unknown name should error so the form falls back to default")
 	}
 }
+
+// TestDeleteRemovesSetAndResponses: Delete removes the set plus every response
+// answered under it (and their answers + used-token markers), leaving other
+// sets untouched.
+func TestDeleteRemovesSetAndResponses(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+	if err := db.Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+
+	id1, _ := Seed(database, surveydef.Default(), 1000)
+	id2, _ := Add(database, surveydef.Default(), 2000)
+
+	// A response answered under set 1, with an answer row and a used-token marker.
+	res, err := database.Exec(
+		`INSERT INTO responses(subject, subject_time, lang, submitted_at, definition_id) VALUES('sub', 42, 'en', 1000, ?)`, id1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rid, _ := res.LastInsertId()
+	if _, err := database.Exec(`INSERT INTO answers(response_id, question_key, num) VALUES(?, 'csat', 5)`, rid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO used_tokens(subject, subject_time, used_at, response_id) VALUES('sub', 42, 1000, ?)`, rid); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := Delete(database, id1)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed = %d, want 1", removed)
+	}
+
+	// Set 1 is gone; set 2 remains.
+	if _, err := ByID(database, id1); err == nil {
+		t.Fatal("set 1 should be deleted")
+	}
+	if _, err := ByID(database, id2); err != nil {
+		t.Fatalf("set 2 should remain: %v", err)
+	}
+
+	// Its responses, answers, and used-token markers are gone.
+	count := func(q string, arg any) int {
+		var n int
+		if err := database.QueryRow(q, arg).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := count(`SELECT COUNT(*) FROM responses WHERE definition_id = ?`, id1); n != 0 {
+		t.Fatalf("responses remain: %d", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM answers WHERE response_id = ?`, rid); n != 0 {
+		t.Fatalf("answers remain: %d", n)
+	}
+	if n := count(`SELECT COUNT(*) FROM used_tokens WHERE response_id = ?`, rid); n != 0 {
+		t.Fatalf("used_tokens remain: %d", n)
+	}
+	if n, _ := Count(database); n != 1 {
+		t.Fatalf("count = %d, want 1", n)
+	}
+}
