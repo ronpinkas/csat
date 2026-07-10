@@ -5,7 +5,7 @@
   <h1>{{.SiteName}}</h1>
   <nav class="admin-nav">
     <a href="/dashboard">Dashboard</a>
-    {{if eq .User.Role "admin"}}<a href="/survey">Survey</a><a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
+    {{if eq .User.Role "admin"}}<a href="/survey">Survey</a><a href="/links">Invitations</a><a href="/users">Users</a><a href="/settings">Settings</a>{{end}}
     <a href="/export.csv" id="exportLink">Export CSV</a>
     <form method="POST" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}">

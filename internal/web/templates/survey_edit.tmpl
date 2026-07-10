@@ -4,7 +4,7 @@
   {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
   <h1>Survey</h1>
   <nav class="admin-nav">
-    <a href="/dashboard">Dashboard</a><a href="/users">Users</a><a href="/settings">Settings</a>
+    <a href="/dashboard">Dashboard</a><a href="/links">Invitations</a><a href="/users">Users</a><a href="/settings">Settings</a>
     <form method="POST" action="/logout" class="inline">
       <input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost">Sign out</button>
     </form>

@@ -39,6 +39,7 @@ var pageTemplates = []string{
 	"users.tmpl",
 	"settings.tmpl",
 	"survey_edit.tmpl",
+	"links.tmpl",
 }
 
 // LoadTemplates parses all page templates once. Call at startup. It registers

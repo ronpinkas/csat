@@ -22,7 +22,7 @@ html, body {
 }
 
 .container {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
@@ -110,11 +110,39 @@ textarea {
   padding: .8rem 1.2rem; font: inherit; font-weight: 600; cursor: pointer;
   text-decoration: none;
 }
+.btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
 .btn.primary { background: var(--brand); color: var(--brand-ink); width: 100%; font-size: 1.05rem; }
 .btn.primary:hover { filter: brightness(1.05); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
 .btn.danger { color: #b91c1c; border-color: #f0c2c2; }
 .btn.danger:hover { background: #fef2f2; border-color: #e59a9a; }
+.btn.success { background: #16a34a; color: #fff; border: 0; }
+.btn.success:hover { filter: brightness(1.06); }
+
+/* Link generator */
+.tabs {
+  display: inline-flex; gap: 4px; margin: 1rem 0;
+  background: #f1f5f9; border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px;
+}
+.tab {
+  border: 0; background: transparent; border-radius: 999px;
+  padding: .45rem 1.15rem; font: inherit; font-weight: 600;
+  color: var(--muted); cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.tab:hover { color: var(--ink); }
+.tab.active { background: #fff; color: var(--brand); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.link-result:not([hidden]) { display: flex; gap: 8px; margin-top: 1rem; align-items: center; }
+.link-result .input { flex: 1; }
+/* generated link reads as a success: light green fill + border */
+#single-url { background: #f0fdf4; border-color: #86efac; color: #14532d; }
+.btn.copied { color: #16a34a; border-color: #86efac; }
+.mono { font-family: ui-monospace, monospace; font-size: 13px; }
+#bulk-result { margin-top: 1.5rem; }
+.links-table { width: 100%; border-collapse: collapse; margin-top: .75rem; table-layout: fixed; }
+.links-table th, .links-table td { text-align: left; padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.links-table td:last-child { word-break: break-all; font-family: ui-monospace, monospace; font-size: 12px; }
 
 .big-check, .big-x {
   width: 64px; height: 64px; border-radius: 50%;

@@ -1,0 +1,71 @@
+{{define "title"}}{{.SiteName}} — Links{{end}}
+{{define "content"}}
+<header class="admin-head">
+  {{if .LogoURL}}<img class="logo" src="{{.LogoURL}}" alt="{{.SiteName}}">{{end}}
+  <h1>Invitations</h1>
+  <nav class="admin-nav">
+    <a href="/dashboard">Dashboard</a><a href="/survey">Survey</a><a href="/users">Users</a><a href="/settings">Settings</a>
+    <form method="POST" action="/logout" class="inline">
+      <input type="hidden" name="csrf" value="{{.CSRF}}"><button class="btn ghost">Sign out</button>
+    </form>
+  </nav>
+</header>
+
+<section class="card" id="links-app" data-config="{{.ConfigJSON}}" data-csrf="{{.CSRF}}">
+  <p class="muted">Generate survey links. Pick a survey, then create a single link or many at once.
+  Nothing is sent — links are minted here for you to copy or download.</p>
+
+  <div class="toolbar">
+    <label>Survey
+      <select id="link-set">
+        {{range .Sets}}<option value="{{.ID}}">{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .IsDefault}} (default){{end}}</option>{{end}}
+      </select>
+    </label>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab active" id="tab-single-btn">Single link</button>
+    <button type="button" class="tab" id="tab-bulk-btn">Bulk</button>
+  </div>
+
+  <div id="tab-single">
+    <div class="form-row">
+      <label for="single-subject">Subject <span class="muted">(unique id, e.g. email)</span></label>
+      <input id="single-subject" class="input" placeholder="person@example.com" autocomplete="off">
+    </div>
+    <div id="single-prefills"></div>
+    <button type="button" class="btn primary" id="single-generate">Generate link</button>
+    <p id="single-success" class="notice ok" hidden></p>
+    <div id="single-result" class="link-result" hidden>
+      <input id="single-url" class="input" readonly>
+      <button type="button" class="btn ghost" id="single-copy">Copy</button>
+    </div>
+    <p id="single-error" class="notice err" hidden></p>
+  </div>
+
+  <div id="tab-bulk" hidden>
+    <p class="muted">Paste rows or upload a CSV with a header row. Include a <strong>subject</strong>
+    column (or <strong>email</strong>) plus a column for each prefill field you want to fill:
+    <span id="bulk-cols"></span></p>
+    <textarea id="bulk-input" rows="8" class="input mono" spellcheck="false"
+      placeholder="subject,name,title&#10;jane@example.com,Jane Doe,VP Retail"></textarea>
+    <div class="form-row">
+      <label for="bulk-file" class="muted">…or upload a .csv</label>
+      <input type="file" id="bulk-file" accept=".csv,text/csv">
+    </div>
+    <button type="button" class="btn primary" id="bulk-generate">Generate links</button>
+    <p id="bulk-error" class="notice err" hidden></p>
+    <p id="bulk-success" class="notice ok" hidden></p>
+    <div id="bulk-result" hidden>
+      <div class="toolbar">
+        <span id="bulk-count" class="muted"></span>
+        <button type="button" class="btn success" id="bulk-download">⬇ Download CSV</button>
+      </div>
+      <table class="links-table"><thead><tr><th>Subject</th><th>Link</th></tr></thead><tbody id="bulk-tbody"></tbody></table>
+    </div>
+  </div>
+</section>
+{{end}}
+{{define "scripts"}}
+<script src="{{asset "/static/js/links.js"}}"></script>
+{{end}}
