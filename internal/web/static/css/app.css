@@ -114,6 +114,41 @@ textarea {
 /* Designer: Allow Save / Force Confirm, one per line */
 .save-options { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; margin-top: 1rem; }
 
+/* Required questions: a red asterisk on the legend, a key under the intro, and
+   a tappable "what's left" prompt (the browser can't tell them — allow_save
+   forms are novalidate, so there are no native validation bubbles). */
+.req { color: var(--bad); font-weight: 700; margin-left: .2rem; }
+.req-legend { color: var(--muted); font-size: .85rem; margin: 0 0 1.25rem; }
+
+.req-note {
+  display: block; width: 100%; margin-top: .75rem;
+  padding: .7rem 1rem; border-radius: 10px;
+  background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+  font: inherit; font-weight: 600; text-align: center; cursor: pointer;
+}
+.req-note:hover { background: #ffedd5; }
+
+/* Questions still needing an answer. Flagged once the person saves (or returns
+   to a saved draft) and cleared the moment each is answered. Amber, not red:
+   these aren't errors, they're the remaining to-do list. */
+.field.missing {
+  background: #fffbeb;
+  border-radius: 10px;
+  padding: .9rem 1rem .9rem 1.15rem;
+  /* The ring and the left accent are drawn as box-shadows, NOT a border: a
+     native <legend> cuts a notch in the fieldset's border and straddles it,
+     which mangles any bordered callout. box-shadow and background are
+     unaffected by it, so the panel stays whole and the legend sits inside. */
+  box-shadow: inset 4px 0 0 0 #f59e0b, inset 0 0 0 1px #fde68a;
+  transition: background .18s ease;
+}
+.field.missing legend { color: #b45309; }
+/* keep the controls crisp against the amber fill */
+.field.missing textarea,
+.field.missing .input,
+.field.missing .select { background: #fff; border-color: #fcd34d; }
+.field.missing .choice { background: #fff; }
+
 /* Save-progress status line under the button */
 .save-status { margin: .6rem 0 0; font-size: .88rem; color: var(--muted); min-height: 1.2em; }
 .save-status.ok { color: var(--good); }

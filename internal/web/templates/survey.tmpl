@@ -6,8 +6,10 @@
   {{if .Intro}}<p class="lede">{{.Intro}}</p>{{end}}
 
   {{if .Saved}}<div class="notice ok">{{.SavedMsg}}</div>{{end}}
+  {{if .HasRequired}}<p class="req-legend"><span class="req">*</span> {{.RequiredLegend}}</p>{{end}}
 
-  <form method="POST" action="/s?t={{.Token}}"
+  <form method="POST" action="/s?t={{.Token}}" data-msg-required-left="{{.RequiredLeft}}"
+    {{if .Resumed}}data-resumed="1"{{end}}
     {{if .AllowSave}}novalidate data-allow-save="1" data-save-url="/s/save?t={{.Token}}"
       data-label-submit="{{.Submit}}" data-label-save="{{.SaveLabel}}"
       data-msg-saving="{{.Saving}}" data-msg-saved="{{.SavedNote}}" data-msg-failed="{{.SaveFailed}}"
@@ -21,7 +23,7 @@
     <h2 class="section-head">{{$q.Label}}</h2>
     {{else}}
     <fieldset class="field"{{if $q.ShowIfKey}} data-showif-key="{{$q.ShowIfKey}}" data-showif-vals="{{$q.ShowIfVals}}" hidden{{end}}>
-      <legend>{{$q.Label}}</legend>
+      <legend>{{$q.Label}}{{if $q.Required}}<span class="req" aria-hidden="true">*</span><span class="sr-only">({{$.RequiredLegend}})</span>{{end}}</legend>
 
       {{if eq $q.Type "stars"}}
       <div class="stars" role="radiogroup" aria-label="{{$q.Label}}">
@@ -93,6 +95,7 @@
     {{end}}
 
     <button type="submit" class="btn primary" id="survey-submit">{{if .AllowSave}}{{.SaveLabel}}{{else}}{{.Submit}}{{end}}</button>
+    <button type="button" class="req-note" id="required-note" hidden></button>
     {{if .AllowSave}}<p class="save-status" id="save-status" aria-live="polite"></p>{{end}}
   </form>
 </section>

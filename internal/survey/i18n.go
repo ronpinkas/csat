@@ -17,6 +17,10 @@ type messages struct {
 	SavedNote    string
 	SaveFailed   string
 
+	// Required-question affordances. {n} is replaced with a count.
+	RequiredLegend string
+	RequiredLeft   string
+
 	ErrInvalidHeading string
 	ErrInvalidMsg     string
 	ErrFormHeading    string
@@ -58,6 +62,8 @@ var catalog = map[string]messages{
 		Saving:            "Saving…",
 		SavedNote:         "Progress saved — not submitted yet.",
 		SaveFailed:        "We couldn't save just now. Check your connection and try again.",
+		RequiredLegend:    "Required",
+		RequiredLeft:      "{n} required question(s) still to answer — show me",
 		ErrInvalidHeading: "This link isn't valid",
 		ErrInvalidMsg:     "The feedback link is invalid or has expired. If you'd still like to share feedback, please contact us.",
 		ErrFormHeading:    "Please complete the form",
@@ -77,6 +83,8 @@ var catalog = map[string]messages{
 		Saving:            "Guardando…",
 		SavedNote:         "Progreso guardado: aún no se ha enviado.",
 		SaveFailed:        "No pudimos guardar en este momento. Revise su conexión e inténtelo de nuevo.",
+		RequiredLegend:    "Obligatorio",
+		RequiredLeft:      "{n} pregunta(s) obligatoria(s) sin responder — mostrar",
 		ErrInvalidHeading: "Este enlace no es válido",
 		ErrInvalidMsg:     "El enlace de comentarios no es válido o ha expirado. Si aún desea compartir su opinión, por favor contáctenos.",
 		ErrFormHeading:    "Por favor complete el formulario",

@@ -95,6 +95,26 @@ type surveyData struct {
 	Saving       string
 	SavedNote    string
 	SaveFailed   string
+
+	// Required-question affordances.
+	HasRequired    bool
+	RequiredLegend string
+	RequiredLeft   string
+	// Resumed means this form was rebuilt from a saved draft. The respondent has
+	// already saved once, so the questions still to answer are flagged on sight
+	// rather than waiting for them to go looking.
+	Resumed bool
+}
+
+// hasRequired reports whether any answerable question must be answered, so the
+// form only shows the "* Required" key when it actually means something.
+func hasRequired(def *surveydef.Definition) bool {
+	for _, q := range def.Questions {
+		if q.Required && q.Type != surveydef.TypeSection {
+			return true
+		}
+	}
+	return false
 }
 
 type doneData struct {
@@ -157,6 +177,11 @@ func (h *Handlers) Form(w http.ResponseWriter, r *http.Request) {
 		Saving:       t.Saving,
 		SavedNote:    t.SavedNote,
 		SaveFailed:   t.SaveFailed,
+
+		HasRequired:    hasRequired(def),
+		RequiredLegend: t.RequiredLegend,
+		RequiredLeft:   t.RequiredLeft,
+		Resumed:        len(draft) > 0,
 	})
 }
 

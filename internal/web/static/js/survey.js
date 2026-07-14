@@ -126,6 +126,58 @@
     try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
   }
 
+  // ---- required questions ----
+  // With allow_save the form is novalidate, so the browser never tells anyone
+  // which questions are blocking them. Surface it ourselves: a live count, and
+  // click it to jump to (and highlight) the ones still unanswered.
+  var reqNote = document.getElementById("required-note");
+  var msgRequiredLeft = form.getAttribute("data-msg-required-left") || "";
+  // Once they have saved (or come back to a saved draft), the questions still
+  // needing an answer stay flagged, so "what do I have left" is answered on sight.
+  var highlight = form.getAttribute("data-resumed") === "1";
+
+  function missingFieldsets() {
+    var out = [];
+    form.querySelectorAll("fieldset.field").forEach(function (fs) {
+      if (fs.hidden) return; // gated off — doesn't apply to this respondent
+      var bad = false;
+      fs.querySelectorAll("input,select,textarea").forEach(function (c) {
+        if (c.willValidate && !c.checkValidity()) bad = true;
+      });
+      if (bad) out.push(fs);
+    });
+    return out;
+  }
+
+  function markMissing(list) {
+    list.forEach(function (fs) { fs.classList.add("missing"); });
+  }
+
+  function updateRequired() {
+    var missing = missingFieldsets();
+    // answered questions lose the flag immediately
+    form.querySelectorAll("fieldset.field.missing").forEach(function (fs) {
+      if (missing.indexOf(fs) === -1) fs.classList.remove("missing");
+    });
+    if (highlight) markMissing(missing);
+    if (!reqNote) return;
+    if (!missing.length) { reqNote.hidden = true; return; }
+    reqNote.hidden = false;
+    reqNote.textContent = msgRequiredLeft.replace("{n}", missing.length);
+  }
+
+  function revealMissing() {
+    var missing = missingFieldsets();
+    if (!missing.length) return;
+    highlight = true;
+    markMissing(missing);
+    missing[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    var first = missing[0].querySelector("input,select,textarea");
+    if (first) { try { first.focus({ preventScroll: true }); } catch (e) { first.focus(); } }
+  }
+
+  if (reqNote) reqNote.addEventListener("click", revealMissing);
+
   // ---- server draft (allow_save) ----
   var saveTimer = null, saving = false;
 
@@ -144,7 +196,7 @@
     statusEl.className = "save-status" + (cls ? " " + cls : "");
   }
 
-  function saveToServer(done) {
+  function saveToServer(explicit, done) {
     if (!allowSave || !saveUrl || saving) return;
     saving = true;
     setStatus(msgSaving, "");
@@ -159,6 +211,7 @@
       saving = false;
       if (!r.ok) throw new Error(String(r.status));
       setStatus(msgSaved, "ok");
+      if (explicit) { highlight = true; updateRequired(); }
       if (done) done(true);
     }).catch(function () {
       saving = false;
@@ -170,7 +223,7 @@
   function queueAutosave() {
     if (!allowSave) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () { saveToServer(); }, 1500);
+    saveTimer = setTimeout(function () { saveToServer(false); }, 1500);
   }
 
   function doSubmit() {
@@ -194,7 +247,7 @@
     document.getElementById("confirm-cancel").addEventListener("click", closeModal);
     document.getElementById("confirm-save").addEventListener("click", function () {
       closeModal();
-      saveToServer();
+      saveToServer(true);
     });
     document.getElementById("confirm-submit").addEventListener("click", function () {
       closeModal();
@@ -213,7 +266,8 @@
     e.preventDefault();
     if (forceConfirm) { openModal(); return; }
     if (isComplete()) { doSubmit(); return; }
-    saveToServer();
+    saveToServer(true);
+    revealMissing(); // saving is fine, but show what still blocks submitting
   });
 
   // ---- init ----
@@ -222,10 +276,12 @@
   if (!allowSave) restore(loadLocal());
   applyGating();
   updateLabel();
+  updateRequired();
 
   function onEdit() {
     applyGating();
     updateLabel();
+    updateRequired();
     if (allowSave) queueAutosave();
     else saveLocal();
   }
