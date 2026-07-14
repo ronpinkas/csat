@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -179,6 +180,18 @@ func (a *Admin) requireRole(role string, next http.Handler) http.Handler {
 
 func (a *Admin) requireCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Parse explicitly: a body over the size limit fails here, and reading
+		// the (empty) form would then report a misleading CSRF failure instead
+		// of the real problem.
+		if err := r.ParseForm(); err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			http.Error(w, "malformed request", http.StatusBadRequest)
+			return
+		}
 		s := sessionFrom(r.Context())
 		if s == nil || subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(s.CSRF)) != 1 {
 			http.Error(w, "invalid CSRF token", http.StatusForbidden)

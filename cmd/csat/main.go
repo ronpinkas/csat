@@ -180,7 +180,11 @@ func main() {
 		httpx.Recover(),
 		httpx.SecurityHeaders(secure),
 		httpx.Logger(),
-		httpx.MaxBytes(64*1024),
+		// 64 KiB was too tight: a survey definition (URL-encoded JSON) and a long
+		// free-text submission both exceed it, and an over-limit body fails to
+		// parse — which surfaces as a bogus "invalid CSRF token". 2 MiB also
+		// matches the budget the logo upload already assumes.
+		httpx.MaxBytes(2*1024*1024),
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
