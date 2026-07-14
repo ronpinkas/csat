@@ -13,8 +13,10 @@ import (
 )
 
 // saveDef: allow_save, with one required question so a partial save is possible.
+// It carries its own thank-you copy, which the submit assertions look for.
 const saveDefJSON = `{
 	"allow_save": true,
+	"thanks": {"en": "Your feedback has been recorded."},
 	"questions":[
 		{"key":"csat","type":"stars","max":5,"required":true,"label":{"en":"Rate us"}},
 		{"key":"comment","type":"text","label":{"en":"Comments"}}
