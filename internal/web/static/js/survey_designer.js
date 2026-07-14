@@ -16,7 +16,7 @@
   ];
   var LANGS = [["en", "English"], ["es", "Español"]];
 
-  var model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] };
+  var model = { version: 1, name: "", intro: {}, thanks: {}, allow_save: false, force_confirm: false, questions: [] };
   var readOnly = true; // browse a published survey read-only until fork/new
   var designer = document.getElementById("designer");
   var form = document.getElementById("survey-form");
@@ -70,6 +70,7 @@
     meta.appendChild(el("h3", null, "Intro & thank-you"));
     meta.appendChild(field("Intro text", langInputs(model.intro, "Shown above the questions", true)));
     meta.appendChild(field("Thank-you text", langInputs(model.thanks, "Shown after submitting", true)));
+    meta.appendChild(saveOptions());
     designer.appendChild(meta);
 
     model.questions.forEach(function (q, idx) {
@@ -86,6 +87,34 @@
       if (e.tagName === "BUTTON") e.style.display = readOnly ? "none" : "";
       else e.disabled = readOnly;
     });
+  }
+
+  // Allow Save lets respondents save progress (stored server-side against their
+  // link, so they can resume on any device). Force Confirm is a modifier on it,
+  // so it only appears once Allow Save is checked.
+  function saveOptions() {
+    var box = el("div", "save-options");
+
+    var allow = el("label", "inline-check");
+    var allowCb = el("input"); allowCb.type = "checkbox"; allowCb.checked = !!model.allow_save;
+    allowCb.addEventListener("change", function () {
+      model.allow_save = allowCb.checked;
+      if (!allowCb.checked) model.force_confirm = false; // meaningless without saving
+      render();
+    });
+    allow.appendChild(allowCb);
+    allow.appendChild(document.createTextNode(" Allow Save (respondents can save and resume later)"));
+    box.appendChild(allow);
+
+    if (model.allow_save) {
+      var force = el("label", "inline-check");
+      var forceCb = el("input"); forceCb.type = "checkbox"; forceCb.checked = !!model.force_confirm;
+      forceCb.addEventListener("change", function () { model.force_confirm = forceCb.checked; syncRaw(); });
+      force.appendChild(forceCb);
+      force.appendChild(document.createTextNode(" Force Confirm (ask before saving or submitting)"));
+      box.appendChild(force);
+    }
+    return box;
   }
 
   function questionCard(q, idx) {
@@ -213,8 +242,8 @@
   function load(jsonText) {
     try {
       var d = JSON.parse(jsonText);
-      model = { version: d.version || 1, name: d.name || "", intro: d.intro || {}, thanks: d.thanks || {}, questions: d.questions || [] };
-    } catch (e) { model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] }; }
+      model = { version: d.version || 1, name: d.name || "", intro: d.intro || {}, thanks: d.thanks || {}, allow_save: !!d.allow_save, force_confirm: !!d.force_confirm, questions: d.questions || [] };
+    } catch (e) { model = { version: 1, name: "", intro: {}, thanks: {}, allow_save: false, force_confirm: false, questions: [] }; }
     var nm = document.getElementById("survey-name");
     if (nm) nm.value = model.name;
     render();
@@ -247,7 +276,7 @@
   });
   var blank = document.getElementById("new-blank");
   if (blank) blank.addEventListener("click", function () {
-    model = { version: 1, name: "", intro: {}, thanks: {}, questions: [] };
+    model = { version: 1, name: "", intro: {}, thanks: {}, allow_save: false, force_confirm: false, questions: [] };
     enterEdit("");
   });
   var cancel = document.getElementById("cancel-edit");

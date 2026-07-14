@@ -36,11 +36,21 @@ var defaultJSON []byte
 
 // Definition is a complete survey.
 type Definition struct {
-	Version   int               `json:"version"`
-	Name      string            `json:"name"`   // human label for the multi-survey picker (optional)
-	Intro     map[string]string `json:"intro"`  // lang -> text
-	Thanks    map[string]string `json:"thanks"` // lang -> text
-	Questions []Question        `json:"questions"`
+	Version int               `json:"version"`
+	Name    string            `json:"name"`   // human label for the multi-survey picker (optional)
+	Intro   map[string]string `json:"intro"`  // lang -> text
+	Thanks  map[string]string `json:"thanks"` // lang -> text
+
+	// AllowSave lets a respondent save progress before finishing. The draft is
+	// stored server-side against the link, so it resumes on any device and takes
+	// priority over the browser's local copy.
+	AllowSave bool `json:"allow_save,omitempty"`
+	// ForceConfirm makes the save/submit action ask for an explicit choice
+	// instead of acting immediately. Only meaningful when AllowSave is set;
+	// normalization clears it otherwise.
+	ForceConfirm bool `json:"force_confirm,omitempty"`
+
+	Questions []Question `json:"questions"`
 }
 
 // Question is one survey item.
@@ -139,6 +149,10 @@ func (d *Definition) normalizeAndValidate() error {
 	}
 	if len(d.Questions) == 0 {
 		return errors.New("survey has no questions")
+	}
+	// Force-confirm is a modifier on saving; it means nothing on its own.
+	if !d.AllowSave {
+		d.ForceConfirm = false
 	}
 	seen := map[string]bool{}
 	byKey := make(map[string]*Question, len(d.Questions))

@@ -45,6 +45,13 @@ type dashboardView struct {
 	SetID int64
 }
 
+// wantIncomplete reports whether the request asked to include saved-but-not-
+// submitted responses ("drafts"). They are excluded everywhere by default.
+func wantIncomplete(r *http.Request) bool {
+	v := r.URL.Query().Get("incomplete")
+	return v == "1" || v == "true"
+}
+
 func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request) {
 	_, _, info, _ := a.parseRange(r)
 	_, setID, sets, _ := a.resolveSet(tenantDB(r.Context()), r)
@@ -64,7 +71,7 @@ func (a *Admin) analytics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
 	}
-	res, err := computeAnalytics(db, def, defID, from, to, loc, info)
+	res, err := computeAnalytics(db, def, defID, from, to, loc, info, wantIncomplete(r))
 	if err != nil {
 		log.Printf("admin: analytics: %v", err)
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -118,7 +125,8 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 		`SELECT r.submitted_at, r.lang, a.question_key, a.text
 		 FROM answers a JOIN responses r ON a.response_id = r.id
 		 WHERE a.question_key IN (`+ph+`) AND a.text IS NOT NULL AND a.text <> ''
-		   AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?
+		   AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`+
+			draftFilter("r", wantIncomplete(r))+`
 		 ORDER BY r.submitted_at DESC LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
@@ -226,9 +234,11 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := db.Query(
-		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, a.question_key, a.num, a.text
+		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, r.incomplete, a.question_key, a.num, a.text
 		 FROM responses r LEFT JOIN answers a ON a.response_id = r.id
-		 WHERE r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ? ORDER BY r.id`, from, to, defID)
+		 WHERE r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`+
+			draftFilter("r", wantIncomplete(r))+`
+		 ORDER BY r.id`, from, to, defID)
 	if err != nil {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
@@ -240,7 +250,7 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
 
-	header := []string{"id", "submitted_at_utc", "subject", "subject_time_utc", "lang"}
+	header := []string{"id", "submitted_at_utc", "subject", "subject_time_utc", "lang", "incomplete"}
 	for _, q := range def.Questions {
 		header = append(header, q.Key)
 	}
@@ -251,6 +261,7 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 		haveRow               bool
 		submittedAt, subjTime int64
 		subject, lang         string
+		incomplete            int
 		vals                  map[string]string
 	)
 	flush := func() {
@@ -263,6 +274,7 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 			csvSafe(subject),
 			time.Unix(subjTime, 0).UTC().Format(time.RFC3339),
 			lang,
+			strconv.Itoa(incomplete),
 		}
 		for _, q := range def.Questions {
 			rec = append(rec, csvSafe(vals[q.Key]))
@@ -273,15 +285,16 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var id, sAt, sTime int64
 		var subj, lng string
+		var inc int
 		var qkey, txt *string
 		var num *int64
-		if err := rows.Scan(&id, &sAt, &subj, &sTime, &lng, &qkey, &num, &txt); err != nil {
+		if err := rows.Scan(&id, &sAt, &subj, &sTime, &lng, &inc, &qkey, &num, &txt); err != nil {
 			log.Printf("admin: export scan: %v", err)
 			return
 		}
 		if !haveRow || id != curID {
 			flush()
-			curID, submittedAt, subjTime, subject, lang = id, sAt, sTime, subj, lng
+			curID, submittedAt, subjTime, subject, lang, incomplete = id, sAt, sTime, subj, lng, inc
 			vals = map[string]string{}
 			haveRow = true
 		}

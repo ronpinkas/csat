@@ -14,6 +14,9 @@
     var q = "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) + "&tz=" + encodeURIComponent(tz);
     var setSel = document.getElementById("setSelect");
     if (setSel && setSel.value) q += "&set=" + encodeURIComponent(setSel.value);
+    // Drafts (saved but never submitted) are excluded unless explicitly included.
+    var inc = document.getElementById("includeIncomplete");
+    if (inc && inc.checked) q += "&incomplete=1";
     return q;
   }
   function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
@@ -116,5 +119,8 @@
   if (apply) apply.addEventListener("click", load);
   var setSel = document.getElementById("setSelect");
   if (setSel) setSel.addEventListener("change", load);
+  // Toggling drafts re-runs load(), which also refreshes the export link.
+  var inc = document.getElementById("includeIncomplete");
+  if (inc) inc.addEventListener("change", load);
   load();
 })();

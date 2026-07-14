@@ -5,9 +5,16 @@
   <h1>{{.SiteName}}</h1>
   {{if .Intro}}<p class="lede">{{.Intro}}</p>{{end}}
 
-  <form method="POST" action="/s?t={{.Token}}">
+  {{if .Saved}}<div class="notice ok">{{.SavedMsg}}</div>{{end}}
+
+  <form method="POST" action="/s?t={{.Token}}"
+    {{if .AllowSave}}novalidate data-allow-save="1" data-save-url="/s/save?t={{.Token}}"
+      data-label-submit="{{.Submit}}" data-label-save="{{.SaveLabel}}"
+      data-msg-saving="{{.Saving}}" data-msg-saved="{{.SavedNote}}" data-msg-failed="{{.SaveFailed}}"
+      {{if .ForceConfirm}}data-force-confirm="1"{{end}}{{end}}>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="set" value="{{.SetID}}">
+    <input type="hidden" name="action" id="form-action" value="submit">
 
     {{range $q := .Questions}}
     {{if $q.IsSection}}
@@ -85,9 +92,23 @@
     {{end}}
     {{end}}
 
-    <button type="submit" class="btn primary">{{.Submit}}</button>
+    <button type="submit" class="btn primary" id="survey-submit">{{if .AllowSave}}{{.SaveLabel}}{{else}}{{.Submit}}{{end}}</button>
+    {{if .AllowSave}}<p class="save-status" id="save-status" aria-live="polite"></p>{{end}}
   </form>
 </section>
+
+{{if .ForceConfirm}}
+<div class="modal" id="confirm-modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <h3 id="confirm-title">{{.ConfirmTitle}}</h3>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" id="confirm-submit" hidden>{{.Submit}}</button>
+      <button type="button" class="btn ghost" id="confirm-save">{{.SaveLabel}}</button>
+      <button type="button" class="btn ghost" id="confirm-cancel">{{.Cancel}}</button>
+    </div>
+  </div>
+</div>
+{{end}}
 {{end}}
 {{define "scripts"}}
 <script src="{{asset "/static/js/survey.js"}}"></script>

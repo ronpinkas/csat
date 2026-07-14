@@ -170,6 +170,7 @@ func main() {
 	})
 	mux.Handle("GET /s", surveyRL(http.HandlerFunc(surveyH.Form)))
 	mux.Handle("POST /s", surveyRL(http.HandlerFunc(surveyH.Submit)))
+	mux.Handle("POST /s/save", surveyRL(http.HandlerFunc(surveyH.Save)))
 	mux.Handle("GET /static/", cacheForever(http.StripPrefix("/static/", static)))
 	mux.HandleFunc("GET /branding/logo", surveyH.Logo)
 	mux.HandleFunc("GET /branding/theme.css", surveyH.ThemeCSS)

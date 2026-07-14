@@ -22,12 +22,21 @@ type answer struct {
 // returns the answers to store. ok is false on any missing-required or
 // out-of-range value.
 //
+// requireComplete distinguishes the two ways answers arrive:
+//   - true  (submit): every visible required question must be answered.
+//   - false (save):   a partial form is fine — required questions may be blank.
+//
+// Either way the values that ARE present are fully validated (valid options,
+// numbers in range, well-formed dates), so a draft can never carry junk.
+//
 // Conditional questions (ShowIf) are evaluated against the answers seen so far,
 // which is sound because a ShowIf may only reference an earlier question (the
 // definition validator enforces that ordering). When a question's condition is
 // not met it is skipped entirely: no required-enforcement, and any posted value
 // for it is dropped so stale/hidden answers never reach the database.
-func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer, ok bool) {
+func parseAnswers(form url.Values, def *surveydef.Definition, requireComplete bool) (answers []answer, ok bool) {
+	// missing reports whether a blank required answer should reject the form.
+	missing := func(required bool) bool { return required && requireComplete }
 	given := map[string][]string{} // question key -> answered value(s), for ShowIf
 	for _, q := range def.Questions {
 		if q.Type == surveydef.TypeSection {
@@ -40,7 +49,7 @@ func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer,
 		case surveydef.TypeStars, surveydef.TypeScale, surveydef.TypeNPS:
 			raw := strings.TrimSpace(form.Get(q.Key))
 			if raw == "" {
-				if q.Required {
+				if missing(q.Required) {
 					return nil, false
 				}
 				continue
@@ -56,7 +65,7 @@ func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer,
 		case surveydef.TypeChoice:
 			raw := form.Get(q.Key)
 			if raw == "" {
-				if q.Required {
+				if missing(q.Required) {
 					return nil, false
 				}
 				continue
@@ -80,7 +89,7 @@ func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer,
 				chosen = append(chosen, v)
 			}
 			if len(chosen) == 0 {
-				if q.Required {
+				if missing(q.Required) {
 					return nil, false
 				}
 				continue
@@ -94,7 +103,7 @@ func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer,
 		case surveydef.TypeNumber, surveydef.TypeDate:
 			raw := strings.TrimSpace(form.Get(q.Key))
 			if raw == "" {
-				if q.Required {
+				if missing(q.Required) {
 					return nil, false
 				}
 				continue
@@ -114,7 +123,7 @@ func parseAnswers(form url.Values, def *surveydef.Definition) (answers []answer,
 		case surveydef.TypeText:
 			t := sanitizeText(form.Get(q.Key), q.MaxLen)
 			if t == "" {
-				if q.Required {
+				if missing(q.Required) {
 					return nil, false
 				}
 				continue

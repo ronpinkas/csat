@@ -33,7 +33,7 @@ const gateDef = `{"questions":[
 
 func TestGatingSkipsRequiredWhenHidden(t *testing.T) {
 	def := mustDef(t, gateDef)
-	answers, ok := parseAnswers(url.Values{"witness": {"no"}}, def)
+	answers, ok := parseAnswers(url.Values{"witness": {"no"}}, def, true)
 	if !ok {
 		t.Fatal("expected ok: hidden required follow-up must not be enforced")
 	}
@@ -47,7 +47,7 @@ func TestGatingSkipsRequiredWhenHidden(t *testing.T) {
 
 func TestGatingEnforcesRequiredWhenShown(t *testing.T) {
 	def := mustDef(t, gateDef)
-	if _, ok := parseAnswers(url.Values{"witness": {"yes"}}, def); ok {
+	if _, ok := parseAnswers(url.Values{"witness": {"yes"}}, def, true); ok {
 		t.Fatal("expected failure: shown required follow-up was left blank")
 	}
 }
@@ -55,7 +55,7 @@ func TestGatingEnforcesRequiredWhenShown(t *testing.T) {
 func TestGatingDropsStaleHiddenValue(t *testing.T) {
 	def := mustDef(t, gateDef)
 	// Condition not met, but a stale value is posted for the hidden field.
-	answers, ok := parseAnswers(url.Values{"witness": {"no"}, "detail": {"stale text"}}, def)
+	answers, ok := parseAnswers(url.Values{"witness": {"no"}, "detail": {"stale text"}}, def, true)
 	if !ok {
 		t.Fatal("expected ok")
 	}
@@ -66,7 +66,7 @@ func TestGatingDropsStaleHiddenValue(t *testing.T) {
 
 func TestGatingStoresBothWhenShown(t *testing.T) {
 	def := mustDef(t, gateDef)
-	answers, ok := parseAnswers(url.Values{"witness": {"yes"}, "detail": {"a real answer"}}, def)
+	answers, ok := parseAnswers(url.Values{"witness": {"yes"}, "detail": {"a real answer"}}, def, true)
 	if !ok || !hasKey(answers, "witness") || !hasKey(answers, "detail") {
 		t.Fatalf("expected both answers stored, ok=%v answers=%+v", ok, answers)
 	}
@@ -77,16 +77,16 @@ func TestNumberAndDateValidation(t *testing.T) {
 		{"key":"hours","type":"number","min":0,"max":80,"required":true,"label":{"en":"H"}},
 		{"key":"day","type":"date","label":{"en":"D"}}
 	]}`)
-	if _, ok := parseAnswers(url.Values{"hours": {"40"}, "day": {"2026-01-15"}}, def); !ok {
+	if _, ok := parseAnswers(url.Values{"hours": {"40"}, "day": {"2026-01-15"}}, def, true); !ok {
 		t.Fatal("valid number/date rejected")
 	}
-	if _, ok := parseAnswers(url.Values{"hours": {"abc"}}, def); ok {
+	if _, ok := parseAnswers(url.Values{"hours": {"abc"}}, def, true); ok {
 		t.Fatal("non-numeric hours accepted")
 	}
-	if _, ok := parseAnswers(url.Values{"hours": {"999"}}, def); ok {
+	if _, ok := parseAnswers(url.Values{"hours": {"999"}}, def, true); ok {
 		t.Fatal("out-of-range hours accepted")
 	}
-	if _, ok := parseAnswers(url.Values{"hours": {"40"}, "day": {"2026-13-40"}}, def); ok {
+	if _, ok := parseAnswers(url.Values{"hours": {"40"}, "day": {"2026-13-40"}}, def, true); ok {
 		t.Fatal("impossible date accepted")
 	}
 }
@@ -96,7 +96,7 @@ func TestSectionProducesNoAnswer(t *testing.T) {
 		{"key":"intro","type":"section","label":{"en":"Section"}},
 		{"key":"csat","type":"stars","required":true,"label":{"en":"C"}}
 	]}`)
-	answers, ok := parseAnswers(url.Values{"csat": {"5"}}, def)
+	answers, ok := parseAnswers(url.Values{"csat": {"5"}}, def, true)
 	if !ok {
 		t.Fatal("expected ok")
 	}

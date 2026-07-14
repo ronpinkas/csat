@@ -8,6 +8,15 @@ type messages struct {
 	DoneTitle  string
 	AlreadyMsg string
 
+	// Save-progress UI (only rendered when the survey has allow_save).
+	SaveProgress string
+	SavedMsg     string
+	ConfirmTitle string
+	Cancel       string
+	Saving       string
+	SavedNote    string
+	SaveFailed   string
+
 	ErrInvalidHeading string
 	ErrInvalidMsg     string
 	ErrFormHeading    string
@@ -42,6 +51,13 @@ var catalog = map[string]messages{
 		Submit:            "Submit feedback",
 		DoneTitle:         "Thank you!",
 		AlreadyMsg:        "We've already recorded your feedback. Thank you!",
+		SaveProgress:      "Save progress",
+		SavedMsg:          "Your progress has been saved. You can close this page and continue later from the same link, on any device.",
+		ConfirmTitle:      "What would you like to do?",
+		Cancel:            "Cancel",
+		Saving:            "Saving…",
+		SavedNote:         "Progress saved — not submitted yet.",
+		SaveFailed:        "We couldn't save just now. Check your connection and try again.",
 		ErrInvalidHeading: "This link isn't valid",
 		ErrInvalidMsg:     "The feedback link is invalid or has expired. If you'd still like to share feedback, please contact us.",
 		ErrFormHeading:    "Please complete the form",
@@ -54,6 +70,13 @@ var catalog = map[string]messages{
 		Submit:            "Enviar comentarios",
 		DoneTitle:         "¡Gracias!",
 		AlreadyMsg:        "Ya registramos sus comentarios. ¡Gracias!",
+		SaveProgress:      "Guardar progreso",
+		SavedMsg:          "Su progreso se ha guardado. Puede cerrar esta página y continuar más tarde con el mismo enlace, desde cualquier dispositivo.",
+		ConfirmTitle:      "¿Qué desea hacer?",
+		Cancel:            "Cancelar",
+		Saving:            "Guardando…",
+		SavedNote:         "Progreso guardado: aún no se ha enviado.",
+		SaveFailed:        "No pudimos guardar en este momento. Revise su conexión e inténtelo de nuevo.",
 		ErrInvalidHeading: "Este enlace no es válido",
 		ErrInvalidMsg:     "El enlace de comentarios no es válido o ha expirado. Si aún desea compartir su opinión, por favor contáctenos.",
 		ErrFormHeading:    "Por favor complete el formulario",
