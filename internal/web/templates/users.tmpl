@@ -19,7 +19,7 @@
   <h3>Invite a user</h3>
   <form method="POST" action="/users/invite">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <div class="toolbar">
+    <div class="toolbar" id="invite-bar">
       <label>Username (optional)<input name="username" placeholder="blank = they choose"></label>
       <label>Role
         <select name="role">
@@ -32,7 +32,7 @@
   </form>
 </section>
 
-<section class="card" style="margin-top:16px">
+<section class="card stacked">
   <table>
     <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
     <tbody>
@@ -41,7 +41,7 @@
         <td>{{.Username}}</td>
         <td>{{.Role}}</td>
         <td>{{if .Active}}Active{{else}}Inactive{{end}}{{if .MustChangePW}} · pending first login{{end}}{{if .ResetRequested}} · <strong>reset requested</strong>{{end}}</td>
-        <td>
+        <td class="row-actions">
           <form method="POST" action="/users/reset" class="inline">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="user_id" value="{{.ID}}">
@@ -54,7 +54,8 @@
             <button class="btn ghost" type="submit">Deactivate</button>
           </form>
           {{end}}
-          <form method="POST" action="/users/delete" class="inline" onsubmit="return confirm('Permanently delete {{.Username}}? This frees the username for reuse and cannot be undone.');">
+          <form method="POST" action="/users/delete" class="inline"
+            data-confirm="Permanently delete {{.Username}}? This frees the username for reuse and cannot be undone.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="user_id" value="{{.ID}}">
             <button class="btn ghost danger" type="submit">Delete</button>
@@ -65,4 +66,7 @@
     </tbody>
   </table>
 </section>
+{{end}}
+{{define "scripts"}}
+<script src="{{asset "/static/js/confirm.js"}}"></script>
 {{end}}

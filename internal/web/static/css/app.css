@@ -14,6 +14,12 @@
 
 * { box-sizing: border-box; }
 
+/* The CSP is style-src 'self' (no 'unsafe-inline'), so inline style= attributes
+   are blocked by the browser. All layout must live here.
+   `hidden` must also beat any display rule (e.g. .designer-actions is flex), or
+   toggling it silently does nothing. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background: var(--bg);
@@ -258,7 +264,93 @@ th { color: var(--muted); font-weight: 600; }
 .options { margin-bottom: 12px; }
 .opt-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
 .inline-check { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; }
-.designer-actions { display: flex; gap: 10px; align-items: center; margin: 14px 0; }
+/* Survey-tab action row. Buttons size to their content here: .btn.primary's
+   width:100% is meant for the public survey's submit button, and inheriting it
+   stretched "New survey" into a banner that squeezed every other label into a
+   multi-line box. Wraps on narrow screens, stacks on mobile. */
+.designer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0; }
+.designer-actions .btn { width: auto; white-space: nowrap; font-size: .92rem; padding: .55rem 1rem; }
+.designer-actions .inline { display: inline-flex; margin: 0; }
+/* keep the destructive action away from the ones you press by accident */
+.designer-actions #delete-survey-form { margin-left: auto; }
+
+/* Dashboard filter bar. Scoped to #dash-toolbar so the other .toolbar uses
+   (survey picker, bulk results) keep their plain layout. Every control is the
+   same height and shares a baseline, so labelled and unlabelled ones line up. */
+#dash-toolbar {
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+#dash-toolbar label { gap: 5px; font-size: .75rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+#dash-toolbar input,
+#dash-toolbar select { height: 38px; padding: 0 .6rem; background: #fff; }
+#dash-toolbar select { min-width: 220px; }
+/* the switch has no stacked label, so match the control height to share the baseline */
+#dash-toolbar .switch { height: 38px; margin-left: 4px; }
+#dash-toolbar #apply { width: auto; height: 38px; margin-left: auto; padding: 0 1.4rem; font-size: .95rem; }
+/* the timezone note reads as a footnote to the bar, not a stray line */
+#dash-toolbar #rangeNote { flex-basis: 100%; font-size: .78rem; color: var(--muted); }
+
+@media (max-width: 640px) {
+  #dash-toolbar { flex-direction: column; align-items: stretch; }
+  #dash-toolbar label,
+  #dash-toolbar .switch,
+  #dash-toolbar #apply { width: 100%; }
+  #dash-toolbar select { min-width: 0; }
+  #dash-toolbar #apply { margin-left: 0; }
+}
+
+/* Users: invite bar. Same treatment as the dashboard filters — matched control
+   heights, and the action button sized to its content rather than inheriting
+   .btn.primary's full-width rule (which is meant for the survey submit). */
+#invite-bar { align-items: flex-end; gap: 12px; margin-bottom: 0; }
+#invite-bar label { gap: 5px; font-size: .75rem; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+#invite-bar input,
+#invite-bar select { height: 38px; padding: 0 .6rem; background: #fff; }
+#invite-bar input { min-width: 220px; }
+#invite-bar .btn.primary { width: auto; height: 38px; padding: 0 1.4rem; font-size: .95rem; }
+
+@media (max-width: 640px) {
+  #invite-bar { flex-direction: column; align-items: stretch; }
+  #invite-bar label,
+  #invite-bar input,
+  #invite-bar .btn.primary { width: 100%; min-width: 0; }
+}
+
+/* Table row actions sit right-aligned, on one line, and never stretch. */
+td.row-actions { text-align: right; white-space: nowrap; }
+td.row-actions .inline { display: inline-flex; margin-left: 6px; }
+td.row-actions .btn { width: auto; padding: .4rem .8rem; font-size: .85rem; }
+tbody tr:hover { background: #fafbfc; }
+th { font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
+td { vertical-align: middle; }
+
+@media (max-width: 640px) {
+  /* stack the row actions full-width so they're comfortable thumb targets */
+  td.row-actions { white-space: normal; text-align: left; }
+  td.row-actions .inline { display: flex; width: 100%; margin: 6px 0 0; }
+  td.row-actions .btn { width: 100%; padding: .55rem .8rem; }
+}
+
+/* Formerly inline style= attributes (blocked by the CSP), now real rules. */
+.card.stacked { margin-top: 16px; }
+.form-foot { margin-top: 12px; }
+#trend-card { margin-bottom: 16px; }
+#comments-card { margin-top: 16px; }
+#key-path-note { margin-top: 1rem; }
+#definition-raw { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .designer-actions { flex-direction: column; align-items: stretch; }
+  .designer-actions .btn,
+  .designer-actions .inline { width: 100%; }
+  .designer-actions #delete-survey-form { margin-left: 0; order: 99; }
+}
 .advanced { margin-top: 12px; }
 .advanced summary { cursor: pointer; font-weight: 600; color: #57606a; }
 .btn.small { padding: 4px 10px; font-size: 13px; }

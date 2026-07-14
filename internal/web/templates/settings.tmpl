@@ -38,12 +38,12 @@
 </section>
 
 {{if .Secret}}
-<section class="card" style="margin-top:16px">
+<section class="card stacked">
   <h3>Survey-link secret</h3>
   <p class="lede">Share this exact value with your call platform's link-builder so the survey links
   it generates will validate here. Treat it like a password — anyone with it can forge links.</p>
   <span class="code">{{.Secret}}</span>
-  <p class="lede" style="margin-top:1rem">When auto-generated, it is stored at <code>{{.KeyPath}}</code>.</p>
+  <p class="lede" id="key-path-note">When auto-generated, it is stored at <code>{{.KeyPath}}</code>.</p>
 </section>
 {{end}}
 {{end}}

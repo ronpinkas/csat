@@ -19,7 +19,7 @@
   start a <strong>new survey</strong> (blank, or from an existing one as a template). The newest survey
   becomes the default for new links; older ones stay usable and keep their responses.</p>
 
-  <div class="toolbar">
+  <div class="toolbar" id="browse-toolbar">
     <label>Survey
       <select id="surveyPicker">
         {{range .Sets}}<option value="{{.ID}}"{{if eq .ID $.SetID}} selected{{end}}>{{if .Name}}{{.Name}}{{else}}Set #{{.ID}}{{end}}{{if .IsDefault}} (default){{end}}</option>{{end}}
@@ -52,14 +52,14 @@
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="definition" id="definition-json">
 
-    <div class="form-row" id="name-row" style="display:none">
+    <div class="form-row" id="name-row" hidden>
       <label for="survey-name">Survey name</label>
       <input id="survey-name" type="text" placeholder="e.g. NPS — Spring 2026">
     </div>
 
     <div id="designer"></div>
 
-    <div class="designer-actions" id="edit-actions" style="display:none">
+    <div class="designer-actions" id="edit-actions" hidden>
       <button class="btn ghost" type="button" id="add-question">+ Add question</button>
       <label class="inline-check"><input type="checkbox" name="set_default" id="set-default"> Set as default</label>
       <button class="btn primary" type="submit">Publish new survey</button>
@@ -70,13 +70,12 @@
       <summary>Advanced — raw JSON</summary>
       <p class="muted">The visual designer is the source of truth on Publish.
       <button class="btn ghost" type="button" id="load-json">Load into designer</button> to round-trip.</p>
-      <textarea id="definition-raw" rows="16" spellcheck="false"
-        style="width:100%;font-family:ui-monospace,monospace;font-size:13px">{{.JSON}}</textarea>
+      <textarea id="definition-raw" rows="16" spellcheck="false">{{.JSON}}</textarea>
     </details>
   </form>
 </section>
 
-<section class="card" style="margin-top:16px">
+<section class="card stacked">
   <h3>Published surveys</h3>
   <table>
     <thead><tr><th>Survey</th><th></th><th></th></tr></thead>

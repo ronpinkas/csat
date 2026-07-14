@@ -14,7 +14,7 @@
   </nav>
 </header>
 
-<div class="toolbar" data-tz="{{.TZ}}">
+<div class="toolbar" id="dash-toolbar" data-tz="{{.TZ}}">
   <label>From<input type="date" id="from" value="{{.From}}"></label>
   <label>To<input type="date" id="to" value="{{.To}}"></label>
   {{if .Sets}}
@@ -29,20 +29,20 @@
     <span class="switch-track"></span>
     <span class="switch-label">Including incomplete</span>
   </label>
-  <button class="btn ghost" id="apply" type="button">Apply</button>
+  <button class="btn primary" id="apply" type="button">Apply</button>
   <span id="rangeNote"></span>
 </div>
 
 <div class="kpis" id="kpis"></div>
 
-<div class="chart-card full" style="margin-bottom:16px">
+<div class="chart-card full" id="trend-card">
   <h3>Responses over time</h3>
   <div class="cbox"><canvas id="trendChart"></canvas></div>
 </div>
 
 <div class="charts" id="charts"></div>
 
-<div class="chart-card" style="margin-top:16px">
+<div class="chart-card" id="comments-card">
   <h3>Recent comments</h3>
   <div id="comments"></div>
 </div>

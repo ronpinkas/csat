@@ -84,7 +84,7 @@
   // selected published survey shows read-only (it's immutable; fork to change).
   function applyReadOnly() {
     designer.querySelectorAll("input,select,textarea,button").forEach(function (e) {
-      if (e.tagName === "BUTTON") e.style.display = readOnly ? "none" : "";
+      if (e.tagName === "BUTTON") e.hidden = readOnly;
       else e.disabled = readOnly;
     });
   }
@@ -250,17 +250,18 @@
   }
 
   // ---- modes ----
-  function show(id, on) { var e = document.getElementById(id); if (e) e.style.display = on ? "" : "none"; }
+  function show(id, on) { var e = document.getElementById(id); if (e) e.hidden = !on; }
   function enterBrowse() {
     readOnly = true;
-    show("browse-actions", true); show("edit-actions", false); show("name-row", false);
+    show("browse-toolbar", true); show("browse-actions", true); show("edit-actions", false); show("name-row", false);
     render();
   }
   function enterEdit(prefillName) {
     readOnly = false;
     var nm = document.getElementById("survey-name");
     if (nm) { nm.value = prefillName != null ? prefillName : (model.name || ""); model.name = nm.value; }
-    show("browse-actions", false); show("edit-actions", true); show("name-row", true);
+    // editing a NEW survey: the published-set picker no longer applies
+    show("browse-toolbar", false); show("browse-actions", false); show("edit-actions", true); show("name-row", true);
     render();
   }
 
