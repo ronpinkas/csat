@@ -107,12 +107,92 @@
     });
   }
 
+  // Lowest-rating feedback: response-centric, so a 1-star response that left no
+  // written comment still appears (that is the point of the section).
+  var lowShown = 0; // rows already on screen, so "Show more" knows what to ask for
+
+  function renderLowRatings(d, append) {
+    var card = document.getElementById("lowrating-card");
+    var box = document.getElementById("lowratings");
+    if (!card || !box) return;
+    var rows = d.rows || [];
+    if (!d.question) { card.hidden = true; return; }
+    card.hidden = false;
+
+    document.getElementById("lowRatingTitle").textContent =
+      "Rated " + d.rating + " — " + d.question;
+    var count = document.getElementById("lowRatingCount");
+    count.textContent = d.total + (d.total === 1 ? " response" : " responses");
+
+    if (!append) { box.innerHTML = ""; lowShown = 0; }
+    else { var old = box.querySelector(".more-wrap"); if (old) box.removeChild(old); }
+    if (!rows.length && !lowShown) {
+      box.innerHTML = '<p class="lede">No responses rated ' + d.rating + " in this range.</p>";
+      return;
+    }
+    lowShown += rows.length;
+    rows.forEach(function (row) {
+      var item = el("div", "c");
+      var meta = el("div", "meta");
+      meta.textContent = new Date(row.submitted_at * 1000).toLocaleString() +
+        (row.subject ? " · " + row.subject : "");
+      item.appendChild(meta);
+      if (row.comments && row.comments.length) {
+        row.comments.forEach(function (c) {
+          var body = el("div", "body");
+          if (row.comments.length > 1 && c.question) {
+            var q = el("span", "cq");
+            q.textContent = c.question + ": ";
+            body.appendChild(q);
+          }
+          body.appendChild(document.createTextNode(c.text));
+          item.appendChild(body);
+        });
+      } else {
+        var none = el("div", "body muted");
+        none.textContent = "(no comment)";
+        item.appendChild(none);
+      }
+      if (row.answers && row.answers.length) {
+        var chips = el("div", "chips");
+        row.answers.forEach(function (a) {
+          var chip = el("span", "chip");
+          var k = el("span", "k"); k.textContent = a.question;
+          chip.appendChild(k);
+          chip.appendChild(document.createTextNode(a.value));
+          chips.appendChild(chip);
+        });
+        item.appendChild(chips);
+      }
+      box.appendChild(item);
+    });
+    if (d.total > lowShown && rows.length) {
+      var wrap = el("div", "more-wrap");
+      var note = el("span", "lede");
+      note.textContent = "Showing " + lowShown + " of " + d.total + ". ";
+      var more = el("button", "btn ghost small");
+      more.type = "button";
+      more.textContent = "Show more";
+      more.addEventListener("click", function () { loadLowRatings((d.page || 0) + 1, true); });
+      wrap.appendChild(note); wrap.appendChild(more);
+      box.appendChild(wrap);
+    }
+  }
+
+  function loadLowRatings(page, append) {
+    fetch("/api/lowratings?" + rangeQuery() + "&page=" + page, { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { renderLowRatings(d, append); })
+      .catch(function () {});
+  }
+
   function load() {
     var q = rangeQuery();
     fetch("/api/analytics?" + q, { headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); }).then(render).catch(function () {});
     fetch("/api/comments?" + q, { headers: { Accept: "application/json" } })
       .then(function (r) { return r.json(); }).then(function (d) { renderComments(d.comments || []); }).catch(function () {});
+    loadLowRatings(0, false);
   }
 
   var apply = document.getElementById("apply");

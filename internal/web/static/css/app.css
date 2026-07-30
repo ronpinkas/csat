@@ -279,9 +279,26 @@ th { color: var(--muted); font-weight: 600; }
 .notice.ok { background: #eafaf0; color: var(--good); }
 .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f0f3f7; padding: .5rem .7rem; border-radius: 8px; word-break: break-all; display: block; margin-top: .5rem; }
 .inline { display: inline; }
-#comments .c { border-bottom: 1px solid var(--line); padding: .6rem 0; }
-#comments .c:last-child { border-bottom: 0; }
-#comments .meta { color: var(--muted); font-size: .8rem; margin-bottom: .2rem; }
+#comments .c, #lowratings .c { border-bottom: 1px solid var(--line); padding: .6rem 0; }
+#comments .c:last-child, #lowratings .c:last-child { border-bottom: 0; }
+#comments .meta, #lowratings .meta { color: var(--muted); font-size: .8rem; margin-bottom: .2rem; }
+
+/* Lowest-rating feedback: same list shape as comments, flagged in red. */
+#lowratings { max-height: 420px; overflow-y: auto; }
+#lowratings .body + .body { margin-top: .3rem; }
+#lowratings .body.muted { color: var(--muted); font-style: italic; }
+#lowrating-card { margin-top: 16px; border-left: 3px solid var(--bad); }
+#lowrating-card h3 { display: flex; align-items: center; gap: .5rem; }
+#lowrating-card .pill { background: #fdecec; color: var(--bad); border-radius: 999px;
+  padding: .12rem .55rem; font-size: .78rem; font-weight: 600; }
+#lowratings .more-wrap { display: flex; align-items: center; gap: .6rem; padding-top: .7rem; }
+#lowratings .more-wrap .btn { width: auto; }
+#lowratings .cq { color: var(--muted); font-weight: 600; }
+/* Context chips: the response's other answers, in survey order. */
+#lowratings .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .45rem; }
+#lowratings .chip { background: #f0f3f7; border: 1px solid var(--line); border-radius: 6px;
+  padding: .15rem .5rem; font-size: .78rem; line-height: 1.5; color: var(--ink); }
+#lowratings .chip .k { color: var(--muted); margin-right: .35rem; }
 #rangeNote { color: var(--muted); font-size: .85rem; }
 
 @media (max-width: 640px) {

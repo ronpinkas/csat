@@ -38,6 +38,7 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /dashboard", a.authed(a.dashboard))
 	mux.Handle("GET /api/analytics", a.authed(a.analytics))
 	mux.Handle("GET /api/comments", a.authed(a.comments))
+	mux.Handle("GET /api/lowratings", a.authed(a.lowRatings))
 	mux.Handle("GET /export.csv", a.authed(a.exportCSV))
 
 	// admin role required

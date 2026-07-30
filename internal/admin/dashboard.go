@@ -96,7 +96,7 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	if page < 0 {
+	if page < 0 || page > 10000 { // Atoi returns MaxInt on overflow; guard OFFSET
 		page = 0
 	}
 	const limit = 25
@@ -115,7 +115,7 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ph := strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",")
+	ph := placeholders(len(keys))
 	args := make([]any, 0, len(keys)+5)
 	for _, k := range keys {
 		args = append(args, k)
@@ -144,6 +144,257 @@ func (a *Admin) comments(w http.ResponseWriter, r *http.Request) {
 		out = append(out, c)
 	}
 	writeJSON(w, map[string]any{"page": page, "comments": out})
+}
+
+// ---- lowest-rating feedback ----
+
+// lowComment is one free-text answer attached to a low-rated response.
+type lowComment struct {
+	Question string `json:"question"`
+	Text     string `json:"text"`
+}
+
+// lowAnswer is one non-text answer shown as context on a low-rated response.
+type lowAnswer struct {
+	Question string `json:"question"`
+	Value    string `json:"value"`
+}
+
+// lowRatingRow is one response that scored the floor of the rating question.
+type lowRatingRow struct {
+	ID          int64        `json:"id"`
+	SubmittedAt int64        `json:"submitted_at"`
+	Subject     string       `json:"subject"`
+	Lang        string       `json:"lang"`
+	Rating      int          `json:"rating"`
+	Comments    []lowComment `json:"comments"`
+	Answers     []lowAnswer  `json:"answers"`
+}
+
+// ratingQuestion picks the question the "lowest rating" view is about: the
+// first stars question (the CSAT score), falling back to the first numeric
+// question so a survey without stars still gets the section.
+func ratingQuestion(def *surveydef.Definition) *surveydef.Question {
+	for i, q := range def.Questions {
+		if q.Type == surveydef.TypeStars {
+			return &def.Questions[i]
+		}
+	}
+	for i, q := range def.Questions {
+		if q.Type == surveydef.TypeScale || q.Type == surveydef.TypeNPS {
+			return &def.Questions[i]
+		}
+	}
+	return nil
+}
+
+// lowRatings lists the responses that gave the rating question its lowest
+// possible score (1 star), newest first, each with whatever free text that same
+// response left. Unlike /api/comments this is response-centric: a 1-star
+// response with no written comment still shows up, so the list length matches
+// the "1" bar in the distribution chart.
+func (a *Admin) lowRatings(w http.ResponseWriter, r *http.Request) {
+	from, to, _, _ := a.parseRange(r)
+	db := tenantDB(r.Context())
+	def, defID, _, err := a.resolveSet(db, r)
+	if err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 0 || page > 10000 { // Atoi returns MaxInt on overflow; guard OFFSET
+		page = 0
+	}
+	const limit = 50
+
+	out := []lowRatingRow{}
+	q := ratingQuestion(def)
+	if q == nil {
+		writeJSON(w, map[string]any{"page": page, "total": 0, "rows": out})
+		return
+	}
+	rating := q.Min
+	// An explicit ?rating=N still has to name a value the question can take.
+	if s := r.URL.Query().Get("rating"); s != "" {
+		if n, cerr := strconv.Atoi(s); cerr == nil && n >= q.Min && n <= q.Max {
+			rating = n
+		}
+	}
+	drafts := draftFilter("r", wantIncomplete(r))
+
+	var total int
+	if err := db.QueryRow(
+		`SELECT COUNT(DISTINCT r.id) FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key = ? AND a.num = ?
+		   AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`+drafts,
+		q.Key, rating, from, to, defID,
+	).Scan(&total); err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := db.Query(
+		`SELECT r.id, r.submitted_at, r.subject, r.lang
+		 FROM answers a JOIN responses r ON a.response_id = r.id
+		 WHERE a.question_key = ? AND a.num = ?
+		   AND r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`+drafts+`
+		 ORDER BY r.submitted_at DESC, r.id DESC LIMIT ? OFFSET ?`,
+		q.Key, rating, from, to, defID, limit, page*limit)
+	if err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	byID := map[int64]int{}
+	for rows.Next() {
+		var row lowRatingRow
+		if err := rows.Scan(&row.ID, &row.SubmittedAt, &row.Subject, &row.Lang); err != nil {
+			http.Error(w, "query error", http.StatusInternalServerError)
+			return
+		}
+		// Defensive: nothing today writes two rows for one (response, stars)
+		// pair, but a duplicate would otherwise render as a phantom entry.
+		if _, dup := byID[row.ID]; dup {
+			continue
+		}
+		row.Rating = rating
+		row.Comments = []lowComment{}
+		row.Answers = []lowAnswer{}
+		byID[row.ID] = len(out)
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := attachAnswers(db, def, q.Key, out, byID); err != nil {
+		http.Error(w, "query error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"page": page, "total": total, "rating": rating,
+		"question": q.LabelFor("en"), "rows": out,
+	})
+}
+
+// rawAnswer is one stored answer row before it is formatted for display.
+type rawAnswer struct {
+	num  *int64
+	text *string
+}
+
+// attachAnswers fills in the rest of each response — free text into Comments,
+// everything else into Answers — for an already-fetched page, in one extra
+// query rather than one per row. skipKey is the rating question itself, which
+// the section header already states. Answers follow the survey's own question
+// order so two rows read the same way.
+func attachAnswers(db *sql.DB, def *surveydef.Definition, skipKey string, out []lowRatingRow, byID map[int64]int) error {
+	if len(out) == 0 {
+		return nil
+	}
+	args := make([]any, 0, len(byID))
+	for id := range byID {
+		args = append(args, id)
+	}
+	rows, err := db.Query(
+		`SELECT response_id, question_key, num, text FROM answers
+		 WHERE response_id IN (`+placeholders(len(byID))+`)
+		 ORDER BY response_id, id`, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	// response id -> question key -> answers (multichoice stores several rows)
+	byResp := map[int64]map[string][]rawAnswer{}
+	for rows.Next() {
+		var id int64
+		var key string
+		var a rawAnswer
+		if err := rows.Scan(&id, &key, &a.num, &a.text); err != nil {
+			return err
+		}
+		if _, ok := byID[id]; !ok {
+			continue
+		}
+		if byResp[id] == nil {
+			byResp[id] = map[string][]rawAnswer{}
+		}
+		byResp[id][key] = append(byResp[id][key], a)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for id, i := range byID {
+		got := byResp[id]
+		if got == nil {
+			continue
+		}
+		for _, q := range def.Questions {
+			if q.Type == surveydef.TypeSection || q.Key == skipKey {
+				continue
+			}
+			vals := got[q.Key]
+			if len(vals) == 0 {
+				continue // unanswered / skipped by a show_if gate
+			}
+			if q.Type == surveydef.TypeText {
+				for _, v := range vals {
+					if v.text != nil && *v.text != "" {
+						out[i].Comments = append(out[i].Comments,
+							lowComment{Question: q.LabelFor("en"), Text: *v.text})
+					}
+				}
+				continue
+			}
+			if s := formatAnswer(q, vals); s != "" {
+				out[i].Answers = append(out[i].Answers, lowAnswer{Question: q.LabelFor("en"), Value: s})
+			}
+		}
+	}
+	return nil
+}
+
+// formatAnswer renders one question's stored answer(s) for display: numeric
+// types as "n / max", choice types as their option labels (falling back to the
+// raw stored value if an option was since renamed away), multichoice joined.
+func formatAnswer(q surveydef.Question, vals []rawAnswer) string {
+	switch q.Type {
+	case surveydef.TypeStars, surveydef.TypeScale, surveydef.TypeNPS:
+		if vals[0].num == nil {
+			return ""
+		}
+		return strconv.FormatInt(*vals[0].num, 10) + " / " + strconv.Itoa(q.Max)
+	case surveydef.TypeChoice, surveydef.TypeMultiChoice:
+		var picked []string
+		for _, v := range vals {
+			if v.text == nil || *v.text == "" {
+				continue
+			}
+			label := *v.text
+			for _, o := range q.Options {
+				if o.Value == *v.text {
+					label = o.LabelFor("en")
+					break
+				}
+			}
+			picked = append(picked, label)
+		}
+		return strings.Join(picked, ", ")
+	default: // number, date — stored verbatim
+		if vals[0].text != nil {
+			return *vals[0].text
+		}
+		if vals[0].num != nil {
+			return strconv.FormatInt(*vals[0].num, 10)
+		}
+	}
+	return ""
+}
+
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }
 
 type settingsView struct {
