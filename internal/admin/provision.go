@@ -14,15 +14,7 @@ import (
 // admin — no shared password is involved.
 func (a *Admin) provision(w http.ResponseWriter, r *http.Request) {
 	// Let an allow-listed platform admin page read the invite link cross-origin.
-	if origin := r.Header.Get("Origin"); origin != "" {
-		for _, o := range a.cfg.Server.CorsOrigins {
-			if o == origin {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Vary", "Origin")
-				break
-			}
-		}
-	}
+	a.allowCORS(w, r)
 	if !a.provider.Multi() {
 		http.Error(w, "provisioning is only available in multi-tenant mode", http.StatusBadRequest)
 		return

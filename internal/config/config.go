@@ -171,7 +171,7 @@ func defaults() Config {
 		DB: DB{Path: "/var/lib/csat/csat.db"},
 		Security: Security{
 			CryptoKeyPath:   "/var/lib/csat/crypto.key",
-			SessionTTLHours: 12,
+			SessionTTLHours: 720, // 30 days: an admin stays signed in across tabs and days
 			InviteTTLHours:  168,
 		},
 		Admin:    Admin{Username: "admin"},
@@ -310,7 +310,7 @@ func (c *Config) Validate() error {
 		return errors.New("admin.username is required")
 	}
 	if c.Security.SessionTTLHours <= 0 {
-		c.Security.SessionTTLHours = 12
+		c.Security.SessionTTLHours = 720
 	}
 	if c.Security.InviteTTLHours <= 0 {
 		c.Security.InviteTTLHours = 168

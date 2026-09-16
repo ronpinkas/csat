@@ -484,17 +484,12 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
 	}
-	rows, err := db.Query(
-		`SELECT r.id, r.submitted_at, r.subject, r.subject_time, r.lang, r.incomplete, a.question_key, a.num, a.text
-		 FROM responses r LEFT JOIN answers a ON a.response_id = r.id
-		 WHERE r.submitted_at >= ? AND r.submitted_at < ? AND r.definition_id = ?`+
-			draftFilter("r", wantIncomplete(r))+`
-		 ORDER BY r.id`, from, to, defID)
+	list, err := collectResponses(db, from, to, defID, false, wantIncomplete(r))
 	if err != nil {
+		log.Printf("admin: export: %v", err)
 		http.Error(w, "query error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
 
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"survey-"+info.From+"_"+info.To+".csv\"")
@@ -507,63 +502,24 @@ func (a *Admin) exportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = cw.Write(header)
 
-	var (
-		curID                 int64
-		haveRow               bool
-		submittedAt, subjTime int64
-		subject, lang         string
-		incomplete            int
-		vals                  map[string]string
-	)
-	flush := func() {
-		if !haveRow {
-			return
+	for _, row := range list {
+		incomplete := 0
+		if row.Incomplete {
+			incomplete = 1
 		}
 		rec := []string{
-			strconv.FormatInt(curID, 10),
-			time.Unix(submittedAt, 0).UTC().Format(time.RFC3339),
-			csvSafe(subject),
-			time.Unix(subjTime, 0).UTC().Format(time.RFC3339),
-			lang,
+			strconv.FormatInt(row.ID, 10),
+			row.SubmittedUTC,
+			csvSafe(row.Subject),
+			row.SubjectTimeUTC,
+			row.Lang,
 			strconv.Itoa(incomplete),
 		}
 		for _, q := range def.Questions {
-			rec = append(rec, csvSafe(vals[q.Key]))
+			rec = append(rec, csvSafe(row.Answers[q.Key]))
 		}
 		_ = cw.Write(rec)
 	}
-
-	for rows.Next() {
-		var id, sAt, sTime int64
-		var subj, lng string
-		var inc int
-		var qkey, txt *string
-		var num *int64
-		if err := rows.Scan(&id, &sAt, &subj, &sTime, &lng, &inc, &qkey, &num, &txt); err != nil {
-			log.Printf("admin: export scan: %v", err)
-			return
-		}
-		if !haveRow || id != curID {
-			flush()
-			curID, submittedAt, subjTime, subject, lang, incomplete = id, sAt, sTime, subj, lng, inc
-			vals = map[string]string{}
-			haveRow = true
-		}
-		if qkey != nil {
-			v := ""
-			if num != nil {
-				v = strconv.FormatInt(*num, 10)
-			} else if txt != nil {
-				v = *txt
-			}
-			if existing, ok := vals[*qkey]; ok && existing != "" {
-				vals[*qkey] = existing + ";" + v // multichoice
-			} else {
-				vals[*qkey] = v
-			}
-		}
-	}
-	flush()
 }
 
 // ---- helpers ----
@@ -578,8 +534,10 @@ func (a *Admin) parseRange(r *http.Request) (from, to int64, info RangeInfo, loc
 		loc, tz = time.UTC, "UTC"
 	}
 	now := time.Now().In(loc)
+	// Both bounds default to today: the dashboard opens on the current day's
+	// responses, and the user widens the range when they want history.
 	toDate := parseDate(r.URL.Query().Get("to"), loc, dateOf(now))
-	fromDate := parseDate(r.URL.Query().Get("from"), loc, dateOf(now.AddDate(0, 0, -29)))
+	fromDate := parseDate(r.URL.Query().Get("from"), loc, dateOf(now))
 	if toDate.Before(fromDate) {
 		fromDate, toDate = toDate, fromDate
 	}

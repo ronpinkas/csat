@@ -29,6 +29,10 @@ func (a *Admin) Mount(mux *http.ServeMux) {
 	// platform tenant provisioning (token-signed; multi-tenant only)
 	mux.Handle("POST /provision", rl(http.HandlerFunc(a.provision)))
 	mux.Handle("GET /sso", rl(http.HandlerFunc(a.sso)))
+	// platform read API: the export as JSON, token-signed like /sso, readable
+	// cross-origin from server.cors_origins (the platform's Chat Dashboard)
+	mux.Handle("GET /api/export.json", rl(http.HandlerFunc(a.exportJSON)))
+	mux.Handle("OPTIONS /api/export.json", http.HandlerFunc(a.exportJSON))
 
 	// session required
 	mux.Handle("GET /{$}", a.authed(a.home))

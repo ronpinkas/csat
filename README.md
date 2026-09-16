@@ -141,6 +141,30 @@ Generate a test link:
 dist/csat -config config.toml -mint -subject "+15551234567" -ts 1717286400 -lang es -base "http://localhost:8080"
 ```
 
+## Reading responses from another app (`/api/export.json`)
+
+The dashboard's CSV export is also available as JSON, for an application that wants to attach
+each survey to the interaction it rates (the platform's Chat Dashboard does this). It is gated
+by a platform **appliance token** — the same `SEC|payload` token `/sso` accepts, signed with the
+deployment's `crypto_secret` — so no browser session is involved:
+
+```
+GET /api/export.json?t=<token>&from=YYYY-MM-DD&to=YYYY-MM-DD[&tz=UTC][&set=<id>|all][&incomplete=1]
+    (or the token in an `Authorization: Bearer <token>` header)
+  -> { "range": {...}, "set": 3,
+       "questions": [ { "key":"csat", "type":"stars", "label":"…", "min":1, "max":5 }, … ],
+       "responses": [ { "id":2612, "submitted_at_utc":"…Z", "subject":"+15551234567",
+                        "subject_time_utc":"…Z", "lang":"es", "incomplete":false, "set_id":3,
+                        "answers": { "csat":"4", "resolution":"yes", "comment":"…" } }, … ] }
+```
+
+`from`/`to` are inclusive calendar days in `tz` (default: the site's display timezone), exactly as
+on the dashboard. `set=all` returns every response in the range regardless of question set (a
+survey edited mid-range would otherwise hide the older responses); `questions` always describes
+the resolved set. A browser page on another origin can read the response only if its origin is
+listed in `[server] cors_origins`. Mint the token like an SSO token (`csat -mint-tenant …`, or the
+same recipe as the appliance signer in `integrations/`); a short expiry (`exp`) is recommended.
+
 ## Multi-tenant mode
 
 CSAT runs single-tenant by default — one database, no `ref` anywhere — exactly as it always has.

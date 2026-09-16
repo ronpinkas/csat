@@ -11,6 +11,10 @@ display_timezone = "UTC"            # default dashboard tz; the UI can override 
 listen_addr     = ":8080"
 trust_proxy     = true              # parse X-Forwarded-* only if the peer is trusted (below)
 trusted_proxies = ["127.0.0.1/32"]
+# Browser origins allowed to READ the token-gated platform endpoints cross-origin
+# (/provision, and /api/export.json — the JSON export the platform's Chat Dashboard
+# pulls surveys from). Exact origins, no wildcard. Empty = server-to-server only.
+# cors_origins = ["https://instantaiguru.com"]
 
 [server.tls]
 mode      = "off"                   # "off" = terminate TLS at your reverse proxy (recommended).
@@ -37,7 +41,7 @@ mode     = "single"
 # stored at crypto_key_path and shown on the admin Settings page. Never a shared default.
 crypto_secret     = "env:CSAT_CRYPTO_SECRET"
 crypto_key_path   = "/var/lib/csat/crypto.key"
-session_ttl_hours = 12
+session_ttl_hours = 720            # 30 days: closing the tab does not sign the admin out
 invite_ttl_hours  = 168
 
 [admin]
